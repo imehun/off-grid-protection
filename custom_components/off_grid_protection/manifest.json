@@ -1,0 +1,10 @@
+{
+  "domain": "off_grid_protection",
+  "name": "OGP - Off-grid Protection",
+  "version": "1.1.0",
+  "requirements": [],
+  "codeowners": [],
+  "config_flow": true,
+  "integration_type": "hub",
+  "iot_class": "calculated"
+}

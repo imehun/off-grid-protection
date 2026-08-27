@@ -1,0 +1,256 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Off-grid Protection",
+        "description": "Configure Off-grid Protection.\n\n© 2006 by Igor M.",
+        "data": {
+          "name": "Name"
+        }
+      },
+      "type": {
+        "title": "Configuration type",
+        "description": "Select what you want to configure.",
+        "data": {
+          "type": "Configuration type"
+        }
+      },
+      "central": {
+        "title": "Central Setup",
+        "description": "Configure the central Off-grid Protection system.\n\n© 2006 by Igor M.",
+        "data": {
+          "inverter_off_grid_status": "Inverter Off-grid Status",
+          "power_meter_status": "Power Meter Status",
+          "recovery_delay": "Recovery delay",
+          "central_pin": "Central PIN",
+          "pin_check": "PIN check",
+          "recovery_enabled": "Recovery enabled",
+          "logs": "Logs"
+        },
+        "data_description": {
+          "inverter_off_grid_status": "Sensor that reports whether the inverter is On-grid or Off-grid.",
+          "power_meter_status": "Sensor that reports whether the power meter is Normal or Offline.",
+          "recovery_delay": "Time to wait after the protection cycle before checking the grid status again, in seconds.",
+          "central_pin": "PIN used for central override authorization.",
+          "pin_check": "Require the central PIN when an override is activated.",
+          "recovery_enabled": "Enable automatic recovery after the grid returns.",
+          "logs": "Enable OGP operational messages in the Home Assistant System Log."
+        }
+      },
+      "climate": {
+        "title": "Climate configuration",
+        "description": "Configure the shutdown and recovery behavior for this climate device.",
+        "data": {
+          "entity_id": "Climate entity",
+          "shutdown_action": "Shutdown action",
+          "off_state": "OFF state",
+          "wait_for_unavailable": "Wait if unavailable",
+          "recovery_timeout": "Recovery timeout",
+          "command_timeout": "Command timeout"
+        }
+      },
+      "switch": {
+        "title": "Switch configuration",
+        "description": "Configure the shutdown and recovery behavior for this switch device.",
+        "data": {
+          "entity_id": "Switch entity",
+          "shutdown_action": "Shutdown action",
+          "off_state": "OFF state",
+          "wait_for_unavailable": "Wait if unavailable",
+          "recovery_timeout": "Recovery timeout",
+          "command_timeout": "Command timeout"
+        }
+      },
+      "custom": {
+        "title": "Custom device configuration",
+        "description": "Configure the shutdown and recovery behavior for this custom device.",
+        "data": {
+          "entity_id": "Entity",
+          "shutdown_action": "Shutdown action",
+          "off_state": "OFF state",
+          "wait_for_unavailable": "Wait if unavailable",
+          "recovery_timeout": "Recovery timeout",
+          "command_timeout": "Command timeout"
+        }
+      },
+      "automations": {
+        "title": "Associated automations",
+        "description": "Select the Home Assistant automations associated with this device.",
+        "data": {
+          "automations": "Automations",
+          "show_all_automations": "Show all automations"
+        },
+        "data_description": {
+          "automations": "Select automations associated with the selected device.",
+          "show_all_automations": "Show all Home Assistant automations instead of only associated automations."
+        }
+      },
+      "override": {
+        "title": "Override configuration",
+        "description": "Configure the override behavior for this device.",
+        "data": {
+          "override_enabled": "Enable override",
+          "require_pin": "Require PIN",
+          "minimum_runtime": "Minimum runtime",
+          "maximum_runtime": "Maximum runtime"
+        }
+      },
+      "lovelace_language": {
+        "title": "Lovelace YAML language",
+        "description": "Select the language for the generated Lovelace YAML.",
+        "data": {
+          "lovelace_language": "Lovelace YAML language"
+        }
+      },
+      "generate": {
+        "title": "Generate Lovelace YAML",
+        "description": "Confirm generation of the Lovelace YAML instructions.",
+        "data": {
+          "confirm_generate": "Confirm generation"
+        }
+      },
+      "central_notifications": {
+        "title": "House power status notifications",
+        "description": "Select where OGP should send notifications about grid or battery operation.",
+        "data": {
+          "notify_targets": "Notification recipients",
+          "browser_mod_targets": "Browser Mod devices",
+          "notification_language": "Notification language",
+          "send_notification": "Send notification",
+          "send_popup": "Show Browser Mod popup"
+        },
+        "data_description": {
+          "notify_targets": "Select one or more available notify recipients.",
+          "browser_mod_targets": "Select one or more Browser Mod devices for popups.",
+          "notification_language": "Language of the generated OGP automation and messages.",
+          "send_notification": "Send a notification to the selected notify recipients when the house operating mode changes.",
+          "send_popup": "Show a Browser Mod popup on the selected devices when the house operating mode changes."
+        }
+      }
+    },
+    "abort": {
+      "device_added": "**Device added**\n\nThe device was successfully added to Off-grid Protection. Generated OGP entities and Lovelace instructions are ready.",
+      "generation_cancelled": "**Generation cancelled**\n\nLovelace YAML generation was cancelled."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Options",
+        "description": "Select what you want to configure.",
+        "data": {
+          "section": "Configuration"
+        }
+      },
+      "central": {
+        "title": "Central Setup",
+        "description": "Edit the central Off-grid Protection settings.",
+        "data": {
+          "inverter_off_grid_status": "Inverter Off-grid Status",
+          "power_meter_status": "Power Meter Status",
+          "recovery_delay": "Recovery delay",
+          "central_pin": "Central PIN",
+          "pin_check": "PIN check",
+          "recovery_enabled": "Recovery enabled",
+          "logs": "Logs"
+        },
+        "data_description": {
+          "inverter_off_grid_status": "Sensor that reports whether the inverter is On-grid or Off-grid.",
+          "power_meter_status": "Sensor that reports whether the power meter is available and in normal condition.",
+          "recovery_delay": "Time to wait after the protection cycle before checking the grid status again, in seconds.",
+          "central_pin": "PIN used for central override authorization.",
+          "pin_check": "Require the central PIN when an override is activated.",
+          "recovery_enabled": "Enable automatic recovery after the grid returns.",
+          "logs": "Enable OGP operational messages in the Home Assistant System Log."
+        }
+      },
+      "device": {
+        "title": "Select device",
+        "description": "Select the device you want to edit or remove.",
+        "data": {
+          "device_id": "Device",
+          "action": "Action"
+        }
+      },
+      "device_delete": {
+        "title": "Delete device",
+        "description": "⚠️ **Delete device {device_name}?**\n\nOGP will remove the device configuration and only resources recorded as generated by OGP.\n\n**Generated OGP resources:**\n{resources}\n\nExisting user automations that were only selected in OGP will not be deleted.",
+        "data": {
+          "confirm": "Confirm deletion"
+        }
+      },
+      "device_settings": {
+        "title": "Device settings",
+        "description": "Edit the configuration of this device.",
+        "data": {
+          "name": "Device name",
+          "entity_id": "Entity",
+          "off_state": "OFF state",
+          "wait_for_unavailable": "Wait if unavailable",
+          "recovery_timeout": "Recovery timeout",
+          "command_timeout": "Command timeout",
+          "automations": "Associated automations",
+          "override_enabled": "Enable override",
+          "require_pin": "Require PIN",
+          "minimum_runtime": "Minimum runtime",
+          "maximum_runtime": "Maximum runtime",
+          "show_all_automations": "Show all automations"
+        },
+        "data_description": {
+          "automations": "Automations associated with the selected device.",
+          "show_all_automations": "Show all Home Assistant automations instead of only associated automations."
+        }
+      },
+      "central_notifications": {
+        "title": "House power status notifications",
+        "description": "Select where OGP should send notifications about grid or battery operation.",
+        "data": {
+          "notify_targets": "Notification recipients",
+          "browser_mod_targets": "Browser Mod devices",
+          "notification_language": "Notification language",
+          "send_notification": "Send notification",
+          "send_popup": "Show Browser Mod popup"
+        },
+        "data_description": {
+          "notify_targets": "Select one or more available notify recipients.",
+          "browser_mod_targets": "Select one or more Browser Mod devices for popups.",
+          "notification_language": "Language of the generated OGP automation and messages.",
+          "send_notification": "Send a notification to the selected notify recipients when the house operating mode changes.",
+          "send_popup": "Show a Browser Mod popup on the selected devices when the house operating mode changes."
+        }
+      }
+    },
+    "abort": {
+      "no_devices": "**No devices**\n\nNo devices have been added yet.",
+      "delete_cancelled": "**Deletion cancelled**\n\nThe device was not deleted."
+    }
+  },
+  "selector": {
+    "configuration_type": {
+      "options": {
+        "central": "Central Setup",
+        "climate": "Climate",
+        "switch": "Switch",
+        "custom": "Custom"
+      }
+    },
+    "configuration_section": {
+      "options": {
+        "central": "Central Setup",
+        "device": "Device",
+        "notifications": "Notifications"
+      }
+    },
+    "device_action": {
+      "options": {
+        "edit": "Edit device",
+        "delete": "Delete device"
+      }
+    },
+    "shutdown_action": {
+      "options": {
+        "turn_off": "Turn off"
+      }
+    }
+  }
+}

@@ -1,0 +1,256 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "OGP – Off-grid Protection",
+        "description": "Konfigurirajte OGP – Off-grid Protection.\n\n© 2006 by Igor M.",
+        "data": {
+          "name": "Naziv"
+        }
+      },
+      "type": {
+        "title": "Vrsta konfiguracije",
+        "description": "Odaberite što želite konfigurirati.",
+        "data": {
+          "type": "Vrsta konfiguracije"
+        }
+      },
+      "central": {
+        "title": "Centralna konfiguracija",
+        "description": "Konfigurirajte centralni OGP sustav.\n\n© 2006 by Igor M.",
+        "data": {
+          "inverter_off_grid_status": "Inverter Off-grid Status",
+          "power_meter_status": "Power Meter Status",
+          "recovery_delay": "Odgoda oporavka",
+          "central_pin": "Centralni PIN",
+          "pin_check": "Provjera PIN-a",
+          "recovery_enabled": "Automatski oporavak",
+          "logs": "Logovi"
+        },
+        "data_description": {
+          "inverter_off_grid_status": "Senzor koji javlja je li inverter na mreži ili izvan mreže.",
+          "power_meter_status": "Senzor koji javlja je li mjerač snage dostupan i u normalnom stanju.",
+          "recovery_delay": "Vrijeme čekanja nakon zaštitnog ciklusa prije ponovne provjere mrežnog stanja, u sekundama.",
+          "central_pin": "PIN koji se koristi za autorizaciju centralnog Overridea.",
+          "pin_check": "Zahtijevaj centralni PIN kada se aktivira Override.",
+          "recovery_enabled": "Omogući automatski oporavak nakon povratka mreže.",
+          "logs": "Omogući OGP operativne poruke u Home Assistant System Logu."
+        }
+      },
+      "climate": {
+        "title": "Konfiguracija Climate uređaja",
+        "description": "Konfigurirajte ponašanje gašenja i oporavka za ovaj Climate uređaj.",
+        "data": {
+          "entity_id": "Entity uređaja",
+          "shutdown_action": "Akcija gašenja",
+          "off_state": "OFF stanje",
+          "wait_for_unavailable": "Čekaj ako je nedostupno",
+          "recovery_timeout": "Timeout oporavka",
+          "command_timeout": "Timeout naredbe"
+        }
+      },
+      "switch": {
+        "title": "Konfiguracija Switch uređaja",
+        "description": "Konfigurirajte ponašanje gašenja i oporavka za ovaj Switch uređaj.",
+        "data": {
+          "entity_id": "Entity uređaja",
+          "shutdown_action": "Akcija gašenja",
+          "off_state": "OFF stanje",
+          "wait_for_unavailable": "Čekaj ako je nedostupno",
+          "recovery_timeout": "Timeout oporavka",
+          "command_timeout": "Timeout naredbe"
+        }
+      },
+      "custom": {
+        "title": "Konfiguracija Custom uređaja",
+        "description": "Konfigurirajte ponašanje gašenja i oporavka za ovaj Custom uređaj.",
+        "data": {
+          "entity_id": "Entity",
+          "shutdown_action": "Akcija gašenja",
+          "off_state": "OFF stanje",
+          "wait_for_unavailable": "Čekaj ako je nedostupno",
+          "recovery_timeout": "Timeout oporavka",
+          "command_timeout": "Timeout naredbe"
+        }
+      },
+      "automations": {
+        "title": "Povezane automatizacije",
+        "description": "Odaberite Home Assistant automatizacije povezane s ovim uređajem.",
+        "data": {
+          "automations": "Automatizacije",
+          "show_all_automations": "Prikaži sve automatizacije"
+        },
+        "data_description": {
+          "automations": "Prikazuju se automatizacije koje referenciraju odabrani uređaj.",
+          "show_all_automations": "Prikaži sve Home Assistant automatizacije umjesto samo povezanih s odabranim uređajem."
+        }
+      },
+      "override": {
+        "title": "Konfiguracija Overridea",
+        "description": "Konfigurirajte ponašanje Overridea za ovaj uređaj.",
+        "data": {
+          "override_enabled": "Omogući Override",
+          "require_pin": "Zahtijevaj PIN",
+          "minimum_runtime": "Minimalno trajanje",
+          "maximum_runtime": "Maksimalno trajanje"
+        }
+      },
+      "lovelace_language": {
+        "title": "Jezik Lovelace YAML-a",
+        "description": "Odaberite jezik generiranog Lovelace YAML-a.",
+        "data": {
+          "lovelace_language": "Jezik Lovelace YAML-a"
+        }
+      },
+      "generate": {
+        "title": "Generiranje Lovelace YAML-a",
+        "description": "Potvrdite generiranje Lovelace YAML uputa.",
+        "data": {
+          "confirm_generate": "Potvrdi generiranje"
+        }
+      },
+      "central_notifications": {
+        "title": "Obavijesti o stanju napajanja",
+        "description": "Odaberite kamo OGP šalje obavijest o mrežnom ili baterijskom radu kuće.",
+        "data": {
+          "notify_targets": "Primatelji obavijesti",
+          "browser_mod_targets": "Browser Mod uređaji",
+          "notification_language": "Jezik obavijesti",
+          "send_notification": "Pošalji obavijest",
+          "send_popup": "Prikaži Browser Mod popup"
+        },
+        "data_description": {
+          "notify_targets": "Odaberite jedan ili više dostupnih notify primatelja.",
+          "browser_mod_targets": "Odaberite jedan ili više Browser Mod uređaja za popup.",
+          "notification_language": "Jezik generirane OGP automatizacije i poruka.",
+          "send_notification": "Pošalji obavijest na odabrane notify primatelje pri promjeni režima rada kuće.",
+          "send_popup": "Prikaži Browser Mod popup na odabranim uređajima pri promjeni režima rada kuće."
+        }
+      }
+    },
+    "abort": {
+      "device_added": "**Uređaj dodan**\n\nUređaj je uspješno dodan u OGP – Off-grid Protection. Generirani OGP entityji i Lovelace upute su spremni.",
+      "generation_cancelled": "**Generiranje otkazano**\n\nGeneriranje Lovelace YAML-a je otkazano."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Postavke",
+        "description": "Odaberite što želite konfigurirati.",
+        "data": {
+          "section": "Konfiguracija"
+        }
+      },
+      "central": {
+        "title": "Centralna konfiguracija",
+        "description": "Uredite centralne OGP postavke.",
+        "data": {
+          "inverter_off_grid_status": "Inverter Off-grid Status",
+          "power_meter_status": "Power Meter Status",
+          "recovery_delay": "Odgoda oporavka",
+          "central_pin": "Centralni PIN",
+          "pin_check": "Provjera PIN-a",
+          "recovery_enabled": "Automatski oporavak",
+          "logs": "Logovi"
+        },
+        "data_description": {
+          "inverter_off_grid_status": "Senzor koji javlja je li inverter na mreži ili izvan mreže.",
+          "power_meter_status": "Senzor koji javlja je li mjerač snage dostupan i u normalnom stanju.",
+          "recovery_delay": "Vrijeme čekanja nakon zaštitnog ciklusa prije ponovne provjere mrežnog stanja, u sekundama.",
+          "central_pin": "PIN koji se koristi za autorizaciju centralnog Overridea.",
+          "pin_check": "Zahtijevaj centralni PIN kada se aktivira Override.",
+          "recovery_enabled": "Omogući automatski oporavak nakon povratka mreže.",
+          "logs": "Omogući OGP operativne poruke u Home Assistant System Logu."
+        }
+      },
+      "device": {
+        "title": "Odabir uređaja",
+        "description": "Odaberite uređaj koji želite urediti ili obrisati.",
+        "data": {
+          "device_id": "Uređaj",
+          "action": "Radnja"
+        }
+      },
+      "device_delete": {
+        "title": "Brisanje uređaja",
+        "description": "⚠️ **Obrisati uređaj {device_name}?**\n\nOGP će ukloniti konfiguraciju uređaja i samo resurse koje je OGP zabilježio kao generirane.\n\n**Generirani OGP resursi:**\n{resources}\n\nPostojeće korisničke automatizacije koje su samo odabrane u OGP-u neće biti obrisane.",
+        "data": {
+          "confirm": "Potvrdi brisanje"
+        }
+      },
+      "device_settings": {
+        "title": "Postavke uređaja",
+        "description": "Uredite konfiguraciju ovog uređaja.",
+        "data": {
+          "name": "Naziv uređaja",
+          "entity_id": "Entity",
+          "off_state": "OFF stanje",
+          "wait_for_unavailable": "Čekaj ako je nedostupno",
+          "recovery_timeout": "Timeout oporavka",
+          "command_timeout": "Timeout naredbe",
+          "automations": "Povezane automatizacije",
+          "show_all_automations": "Prikaži sve automatizacije",
+          "override_enabled": "Omogući Override",
+          "require_pin": "Zahtijevaj PIN",
+          "minimum_runtime": "Minimalno trajanje",
+          "maximum_runtime": "Maksimalno trajanje"
+        },
+        "data_description": {
+          "automations": "Prikazuju se automatizacije koje referenciraju odabrani uređaj.",
+          "show_all_automations": "Prikaži sve Home Assistant automatizacije umjesto samo povezanih s odabranim uređajem."
+        }
+      },
+      "central_notifications": {
+        "title": "Obavijesti o stanju napajanja",
+        "description": "Odaberite kamo OGP šalje obavijest o mrežnom ili baterijskom radu kuće.",
+        "data": {
+          "notify_targets": "Primatelji obavijesti",
+          "browser_mod_targets": "Browser Mod uređaji",
+          "notification_language": "Jezik obavijesti",
+          "send_notification": "Pošalji obavijest",
+          "send_popup": "Prikaži Browser Mod popup"
+        },
+        "data_description": {
+          "notify_targets": "Odaberite jedan ili više dostupnih notify primatelja.",
+          "browser_mod_targets": "Odaberite jedan ili više Browser Mod uređaja za popup.",
+          "notification_language": "Jezik generirane OGP automatizacije i poruka.",
+          "send_notification": "Pošalji obavijest na odabrane notify primatelje pri promjeni režima rada kuće.",
+          "send_popup": "Prikaži Browser Mod popup na odabranim uređajima pri promjeni režima rada kuće."
+        }
+      }
+    },
+    "abort": {
+      "no_devices": "**Nema uređaja**\n\nJoš nije dodan nijedan uređaj.",
+      "delete_cancelled": "**Brisanje otkazano**\n\nUređaj nije obrisan."
+    }
+  },
+  "selector": {
+    "configuration_type": {
+      "options": {
+        "central": "Centralna konfiguracija",
+        "climate": "Klima",
+        "switch": "Preklopnik",
+        "custom": "Prilagođeni uređaj"
+      }
+    },
+    "configuration_section": {
+      "options": {
+        "central": "Centralna konfiguracija",
+        "device": "Uređaj",
+        "notifications": "Obavijesti"
+      }
+    },
+    "device_action": {
+      "options": {
+        "edit": "Uredi uređaj",
+        "delete": "Obriši uređaj"
+      }
+    },
+    "shutdown_action": {
+      "options": {
+        "turn_off": "Isključi"
+      }
+    }
+  }
+}

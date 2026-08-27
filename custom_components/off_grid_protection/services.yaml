@@ -1,0 +1,31 @@
+activate_override:
+  name: Activate Override
+  description: Allow a protected device to operate temporarily while the system is OFF-GRID.
+  fields:
+    device_id:
+      name: Device
+      description: ID of the protected device.
+      required: true
+      selector:
+        text:
+
+    duration:
+      name: Duration
+      description: Override duration in minutes.
+      required: true
+      default: 10
+      selector:
+        number:
+          min: 1
+          max: 60
+          step: 1
+          mode: box
+          unit_of_measurement: min
+
+    pin:
+      name: PIN
+      description: Off-grid Protection PIN.
+      required: true
+      selector:
+        text:
+          type: password

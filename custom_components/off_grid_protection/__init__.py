@@ -21,6 +21,8 @@ from .notifications import (
 
 DOMAIN = "off_grid_protection"
 
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
 SERVICE_ACTIVATE_OVERRIDE = "activate_override"
 SERVICE_REQUEST_OVERRIDE = "request_override"
 

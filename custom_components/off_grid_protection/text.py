@@ -65,6 +65,13 @@ class OffGridOverridePinText(TextEntity):
         self._attr_name = (
             f"{device_name} Override PIN"
         )
+
+        self._attr_device_info = {
+            "identifiers": {
+                (DOMAIN, device_id)
+            },
+            "name": device_name,
+        }
         self._attr_native_value = ""
 
     @property
@@ -77,8 +84,20 @@ class OffGridOverridePinText(TextEntity):
         self,
         value: str,
     ) -> None:
-        """Store the entered PIN."""
+        """Store the entered PIN and request an override."""
 
         self._attr_native_value = str(value)
+        self.async_write_ha_state()
 
+        await self.hass.services.async_call(
+            DOMAIN,
+            "request_override",
+            {
+                "device_id": self._device_id,
+                "pin": str(value),
+            },
+            blocking=True,
+        )
+
+        self._attr_native_value = ""
         self.async_write_ha_state()

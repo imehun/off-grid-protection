@@ -16,6 +16,7 @@ from homeassistant.util import slugify
 
 from . import DOMAIN
 from .lovelace import generate_setup_instructions
+from .coordinator import normalize_log_level
 from .notifications import (
     AUTOMATION_ID_PREFIX,
     async_generate_house_status_automation,
@@ -78,6 +79,29 @@ def _get_automation_options(
 
     return options
 
+def _get_configured_main_entity_ids(
+    hass,
+    central_entry_id: str,
+) -> set[str]:
+    """Return main entity IDs already assigned to OGP device entries."""
+    configured: set[str] = set()
+
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        if entry.data.get("type") != "device":
+            continue
+        if entry.data.get("central_entry_id") != central_entry_id:
+            continue
+
+        device = entry.data.get("device", {})
+        entity_id = device.get("entity_id")
+        if not entity_id:
+            entity_id = device.get("type_config", {}).get("entity_id")
+
+        if entity_id:
+            configured.add(entity_id)
+
+    return configured
+
 
 class OffGridProtectionConfigFlow(
     config_entries.ConfigFlow,
@@ -120,7 +144,7 @@ class OffGridProtectionConfigFlow(
             ]
             return await self.async_step_type()
 
-        default_name = ("" if self._central_entry else "OGP – Off-grid Protection")
+        default_name = ("" if self._central_entry else "OGP – Off-grid Battery Protection")
 
         schema = vol.Schema(
             {
@@ -198,7 +222,6 @@ class OffGridProtectionConfigFlow(
             data={
                 "type": "central",
                 "central": central_config,
-                "devices": [],
             },
         )
 
@@ -224,6 +247,9 @@ class OffGridProtectionConfigFlow(
             ],
             notification_types=notification_config[
                 "notification_types"
+            ],
+            notification_events=notification_config[
+                "notification_events"
             ],
             notify_targets=notification_config[
                 "notify_targets"
@@ -318,8 +344,18 @@ class OffGridProtectionConfigFlow(
                 ): bool,
                 vol.Required(
                     "logs",
-                    default=True,
-                ): bool,
+                    default="warnings",
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=[
+                            "off",
+                            "warnings",
+                            "debug",
+                        ],
+                        mode=selector.SelectSelectorMode.LIST,
+                        translation_key="log_level",
+                    )
+                ),
                 vol.Required(
                     "notifications_enabled",
                     default=False,
@@ -350,6 +386,14 @@ class OffGridProtectionConfigFlow(
                 False,
             ):
                 notification_types.append("popup")
+            notification_events = []
+            if user_input.get("notify_grid_status", True):
+                notification_events.append("grid")
+            if user_input.get("notify_protection_status", True):
+                notification_events.append("protection")
+            if user_input.get("notify_security", True):
+                notification_events.append("security")
+
             notify_targets = list(
                 user_input.get(
                     "notify_targets",
@@ -405,6 +449,7 @@ class OffGridProtectionConfigFlow(
             notification_config = {
                 "enabled": True,
                 "notification_types": notification_types,
+                "notification_events": notification_events,
                 "notify_targets": notify_targets,
                 "browser_mod_targets": browser_mod_targets,
                 "language": user_input.get(
@@ -482,6 +527,33 @@ class OffGridProtectionConfigFlow(
                     )
                 ),
                 vol.Required(
+                    "notify_grid_status",
+                    default=(
+                        "grid" in current.get(
+                            "notification_events",
+                            ["grid", "protection", "security"],
+                        )
+                    ),
+                ): bool,
+                vol.Required(
+                    "notify_protection_status",
+                    default=(
+                        "protection" in current.get(
+                            "notification_events",
+                            ["grid", "protection", "security"],
+                        )
+                    ),
+                ): bool,
+                vol.Required(
+                    "notify_security",
+                    default=(
+                        "security" in current.get(
+                            "notification_events",
+                            ["grid", "protection", "security"],
+                        )
+                    ),
+                ): bool,
+                vol.Required(
                     "notification_language",
                     default=current.get(
                         "language",
@@ -515,13 +587,23 @@ class OffGridProtectionConfigFlow(
             self._device_config = user_input
             return await self.async_step_automations()
 
+        configured_entities = _get_configured_main_entity_ids(
+            self.hass,
+            self._central_entry.entry_id,
+        )
+        available_entities = [
+            entity_id
+            for entity_id in self.hass.states.async_entity_ids("climate")
+            if entity_id not in configured_entities
+        ]
+
         schema = vol.Schema(
             {
                 vol.Required(
                     "entity_id",
                 ): selector.EntitySelector(
                     selector.EntitySelectorConfig(
-                        domain="climate",
+                        include_entities=available_entities,
                     )
                 ),
                 vol.Required(
@@ -582,13 +664,23 @@ class OffGridProtectionConfigFlow(
             self._device_config = user_input
             return await self.async_step_automations()
 
+        configured_entities = _get_configured_main_entity_ids(
+            self.hass,
+            self._central_entry.entry_id,
+        )
+        available_entities = [
+            entity_id
+            for entity_id in self.hass.states.async_entity_ids("switch")
+            if entity_id not in configured_entities
+        ]
+
         schema = vol.Schema(
             {
                 vol.Required(
                     "entity_id",
                 ): selector.EntitySelector(
                     selector.EntitySelectorConfig(
-                        domain="switch",
+                        include_entities=available_entities,
                     )
                 ),
                 vol.Required(
@@ -649,11 +741,25 @@ class OffGridProtectionConfigFlow(
             self._device_config = user_input
             return await self.async_step_automations()
 
+        configured_entities = _get_configured_main_entity_ids(
+            self.hass,
+            self._central_entry.entry_id,
+        )
+        available_entities = [
+            state.entity_id
+            for state in self.hass.states.async_all()
+            if state.entity_id not in configured_entities
+        ]
+
         schema = vol.Schema(
             {
                 vol.Required(
                     "entity_id",
-                ): selector.EntitySelector(),
+                ): selector.EntitySelector(
+                    selector.EntitySelectorConfig(
+                        include_entities=available_entities,
+                    )
+                ),
                 vol.Required(
                     "shutdown_action",
                 ): selector.ActionSelector(),
@@ -865,10 +971,10 @@ class OffGridProtectionConfigFlow(
         """Generate resources and Lovelace setup instructions."""
 
         if user_input is not None:
-            if not user_input.get("confirm_generate", False):
-                return self.async_abort(
-                    reason="generation_cancelled",
-                )
+            generate_yaml = user_input.get(
+                "generate_lovelace_yaml",
+                False,
+            )
 
             device = {
                 "id": uuid4().hex,
@@ -877,9 +983,15 @@ class OffGridProtectionConfigFlow(
                 "entity_id": self._device_config[
                     "entity_id"
                 ],
-                "type_config": self._device_config,
-                "automations": self._device_automations,
-                "override": self._device_override,
+                "type_config": dict(
+                    self._device_config
+                ),
+                "automations": list(
+                    self._device_automations
+                ),
+                "override": dict(
+                    self._device_override
+                ),
                 "generated_resources": {
                     "entities": [],
                     "automations": [],
@@ -887,95 +999,48 @@ class OffGridProtectionConfigFlow(
                 },
             }
 
-            current_data = dict(
-                self._central_entry.data
-            )
-
-            devices = list(
-                current_data.get(
-                    "devices",
-                    [],
-                )
-            )
-
-            devices.append(device)
-
-            current_data["devices"] = devices
-
-            self.hass.config_entries.async_update_entry(
-                self._central_entry,
-                data=current_data,
-            )
-
-            # Record ownership of all OGP resources generated for this
-            # device. No device name or entity ID is hardcoded.
             slug = slugify(self._device_name)
 
             device["generated_resources"]["entities"] = [
                 f"binary_sensor.{slug}_off_grid_protection_locked",
                 f"number.{slug}_override_duration",
                 f"sensor.{slug}_override_remaining",
+                f"sensor.{slug}_protection_status",
                 f"text.{slug}_override_pin",
             ]
 
-            updated_data = dict(
-                self._central_entry.data
-            )
-
-            updated_devices = list(
-                updated_data.get(
-                    "devices",
-                    [],
+            if generate_yaml:
+                instructions = generate_setup_instructions(
+                    device_name=self._device_name,
+                    device_entity_id=self._device_config["entity_id"],
+                    language=self._lovelace_language,
                 )
-            )
 
-            for index, existing_device in enumerate(
-                updated_devices
-            ):
-                if existing_device["id"] == device["id"]:
-                    updated_devices[index] = device
-                    break
+                persistent_notification.async_create(
+                    self.hass,
+                    message=instructions,
+                    title=(
+                        f"OGP – Off-grid Protection — "
+                        f"Lovelace: {self._device_name}"
+                    ),
+                    notification_id=(
+                        f"off_grid_lovelace_{device['id']}"
+                    ),
+                )
 
-            updated_data["devices"] = updated_devices
-
-            self.hass.config_entries.async_update_entry(
-                self._central_entry,
-                data=updated_data,
-            )
-
-            # Reload only after ownership is stored so the entity platforms
-            # see the newly added device immediately.
-            await self.hass.config_entries.async_reload(
-                self._central_entry.entry_id
-            )
-
-            # Generate Lovelace instructions for every configured device.
-            instructions = generate_setup_instructions(
-                device_name=self._device_name,
-                device_entity_id=self._device_config["entity_id"],
-                language=self._lovelace_language,
-            )
-
-            persistent_notification.async_create(
-                self.hass,
-                message=instructions,
-                title=(
-                    "OGP – Off-grid Protection — "
-                    f"Lovelace: {self._device_name}"
-                ),
-                notification_id=(
-                    f"off_grid_lovelace_{device['id']}"
-                ),
-            )
-
-            return self.async_abort(
-                reason="device_added",
+            return self.async_create_entry(
+                title=self._device_name,
+                data={
+                    "type": "device",
+                    "central_entry_id": self._central_entry.entry_id,
+                    "device": device,
+                },
             )
 
         schema = vol.Schema(
             {
-                vol.Required(
-                    "confirm_generate",
+                vol.Optional(
+                    "generate_lovelace_yaml",
                     default=False,
                 ): bool,
             }
@@ -991,6 +1056,23 @@ class OffGridProtectionOptionsFlow(
     config_entries.OptionsFlow
 ):
     """Handle options for Off-grid Protection."""
+
+    async def _async_reload_ogp_device_entries(self) -> None:
+        """Reload all OGP device entries belonging to this central entry."""
+
+        for entry in self.hass.config_entries.async_entries(DOMAIN):
+            if entry.data.get("type") != "device":
+                continue
+
+            if entry.data.get("central_entry_id") != self.config_entry.entry_id:
+                continue
+
+            if entry.disabled_by is not None:
+                continue
+
+            await self.hass.config_entries.async_reload(
+                entry.entry_id
+            )
 
     def _get_ogp_notification_automation_ids(self) -> set[str]:
         """Return all OGP house-status automation IDs currently loaded."""
@@ -1021,18 +1103,114 @@ class OffGridProtectionOptionsFlow(
 
         return ids
 
+    async def async_step_device_options(
+        self,
+        user_input=None,
+    ):
+        """Select what should be configured for this device."""
+
+        if user_input is not None:
+            action = user_input["action"]
+
+            if action == "device_settings":
+                return await self.async_step_device_settings()
+
+            if action == "regenerate_lovelace_yaml":
+                return await self.async_step_regenerate_lovelace_yaml()
+
+        schema = vol.Schema(
+            {
+                vol.Required(
+                    "action",
+                    default="device_settings",
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=[
+                            "device_settings",
+                            "regenerate_lovelace_yaml",
+                        ],
+                        mode=selector.SelectSelectorMode.LIST,
+                        translation_key="device_options_action",
+                    )
+                ),
+            }
+        )
+
+        return self.async_show_form(
+            step_id="device_options",
+            data_schema=schema,
+        )
+
+    async def async_step_regenerate_lovelace_yaml(
+        self,
+        user_input=None,
+    ):
+        """Regenerate Lovelace YAML for this device."""
+
+        device = self.config_entry.data.get("device", {})
+
+        if user_input is not None:
+            language = user_input["lovelace_language"]
+
+            instructions = generate_setup_instructions(
+                device_name=device.get("name", ""),
+                device_entity_id=device.get("entity_id", ""),
+                language=language,
+            )
+
+            device_id = device.get(
+                "id",
+                self.config_entry.entry_id,
+            )
+
+            persistent_notification.async_create(
+                self.hass,
+                message=instructions,
+                notification_id=f"off_grid_lovelace_{device_id}",
+            )
+
+            return self.async_create_entry(
+                title="",
+                data={},
+            )
+
+        current_language = device.get(
+            "lovelace_language",
+            "en",
+        )
+
+        schema = vol.Schema(
+            {
+                vol.Required(
+                    "lovelace_language",
+                    default=current_language,
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=["en", "hr"],
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                        translation_key="lovelace_language",
+                    )
+                ),
+            }
+        )
+
+        return self.async_show_form(
+            step_id="regenerate_lovelace_yaml",
+            data_schema=schema,
+        )
+
     async def async_step_init(
         self,
         user_input=None,
     ):
         """Select what should be configured."""
 
+        if self.config_entry.data.get("type") == "device":
+            return await self.async_step_device_options()
+
         if user_input is not None:
             if user_input["section"] == "central":
                 return await self.async_step_central()
-
-            if user_input["section"] == "device":
-                return await self.async_step_device()
 
             if user_input["section"] == "notifications":
                 current = self.config_entry.data.get(
@@ -1055,7 +1233,7 @@ class OffGridProtectionOptionsFlow(
                     default="central",
                 ): selector.SelectSelector(
                     selector.SelectSelectorConfig(
-                        options=["central", "device", "notifications"],
+                        options=["central", "notifications"],
                         mode=selector.SelectSelectorMode.LIST,
                         translation_key="configuration_section",
                     )
@@ -1082,6 +1260,24 @@ class OffGridProtectionOptionsFlow(
         if user_input is not None:
             central_config = dict(user_input)
 
+            # Preserve the existing notification configuration when editing
+            # Central Setup. Notification settings are managed exclusively
+            # by the House power status notifications step and must not be
+            # deleted just because Central Setup is saved.
+            existing_central = self.config_entry.data.get(
+                "central",
+                {},
+            )
+            existing_notifications = existing_central.get(
+                "notifications",
+                {},
+            )
+
+            if existing_notifications:
+                central_config["notifications"] = dict(
+                    existing_notifications
+                )
+
             if central_config.get(
                 "notifications_enabled",
                 False,
@@ -1099,18 +1295,19 @@ class OffGridProtectionOptionsFlow(
                 "notifications",
                 {},
             )
+            automation_ids = old_notifications.get(
+                "generated_resources",
+                {},
+            ).get(
+                "automations",
+                [],
+            )
             old_automation_id = (
-                old_notifications.get(
-                    "generated_resources",
-                    {},
-                ).get(
-                    "automations",
-                    [],
-                )[0]
+                automation_ids[0]
                 if old_notifications.get(
                     "enabled",
                     False,
-                )
+                ) and automation_ids
                 else None
             )
 
@@ -1120,13 +1317,17 @@ class OffGridProtectionOptionsFlow(
                     old_automation_id,
                 )
 
-            central_config.pop(
-                "notifications",
-                None,
+            # Keep notification-generated resources intact. Notification
+            # automation lifecycle is managed by the notification settings
+            # flow, not by Central Setup.
+            existing_generated_resources = existing_central.get(
+                "generated_resources",
+                {},
             )
-            central_config["generated_resources"] = {
-                "automations": [],
-            }
+            if existing_generated_resources:
+                central_config["generated_resources"] = dict(
+                    existing_generated_resources
+                )
 
             new_data = dict(
                 self.config_entry.data
@@ -1206,11 +1407,23 @@ class OffGridProtectionOptionsFlow(
                 ): bool,
                 vol.Required(
                     "logs",
-                    default=current.get(
-                        "logs",
-                        True,
+                    default=normalize_log_level(
+                        current.get(
+                            "logs",
+                            "warnings",
+                        )
                     ),
-                ): bool,
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=[
+                            "off",
+                            "warnings",
+                            "debug",
+                        ],
+                        mode=selector.SelectSelectorMode.LIST,
+                        translation_key="log_level",
+                    )
+                ),
             }
         )
 
@@ -1233,6 +1446,14 @@ class OffGridProtectionOptionsFlow(
                 notification_types.append("notify")
             if user_input.get("send_popup", False):
                 notification_types.append("popup")
+
+            notification_events = []
+            if user_input.get("notify_grid_status", True):
+                notification_events.append("grid")
+            if user_input.get("notify_protection_status", True):
+                notification_events.append("protection")
+            if user_input.get("notify_security", True):
+                notification_events.append("security")
 
             notify_targets = list(user_input.get("notify_targets", []))
             browser_mod_targets = list(
@@ -1272,6 +1493,11 @@ class OffGridProtectionOptionsFlow(
                     self.config_entry,
                     data=new_data,
                 )
+
+                # Central notification settings changed. Reload every
+                # configured OGP device so all device entries immediately
+                # use the current central configuration.
+                await self._async_reload_ogp_device_entries()
 
                 return self.async_create_entry(
                     title="",
@@ -1315,6 +1541,7 @@ class OffGridProtectionOptionsFlow(
             central_config["notifications"] = {
                 "enabled": True,
                 "notification_types": notification_types,
+                "notification_events": notification_events,
                 "notify_targets": notify_targets,
                 "browser_mod_targets": browser_mod_targets,
                 "language": language,
@@ -1331,6 +1558,7 @@ class OffGridProtectionOptionsFlow(
                     "inverter_off_grid_status"
                 ],
                 notification_types=notification_types,
+                notification_events=notification_events,
                 notify_targets=notify_targets,
                 browser_mod_targets=browser_mod_targets,
                 language=language,
@@ -1342,6 +1570,11 @@ class OffGridProtectionOptionsFlow(
                 self.config_entry,
                 data=new_data,
             )
+
+            # Central notification settings changed. Reload every
+            # configured OGP device so all device entries immediately
+            # use the current central configuration.
+            await self._async_reload_ogp_device_entries()
 
             return self.async_create_entry(
                 title="",
@@ -1430,6 +1663,42 @@ class OffGridProtectionOptionsFlow(
                     )
                 ),
                 vol.Required(
+                    "notify_grid_status",
+                    default=(
+                        submitted.get(
+                            "notify_grid_status",
+                            "grid" in value(
+                                "notification_events",
+                                ["grid", "protection", "security"],
+                            ),
+                        )
+                    ),
+                ): bool,
+                vol.Required(
+                    "notify_protection_status",
+                    default=(
+                        submitted.get(
+                            "notify_protection_status",
+                            "protection" in value(
+                                "notification_events",
+                                ["grid", "protection", "security"],
+                            ),
+                        )
+                    ),
+                ): bool,
+                vol.Required(
+                    "notify_security",
+                    default=(
+                        submitted.get(
+                            "notify_security",
+                            "security" in value(
+                                "notification_events",
+                                ["grid", "protection", "security"],
+                            ),
+                        )
+                    ),
+                ): bool,
+                vol.Required(
                     "notification_language",
                     default=value(
                         "notification_language",
@@ -1456,293 +1725,9 @@ class OffGridProtectionOptionsFlow(
             }
         )
 
-    async def async_step_device(
-        self,
-        user_input=None,
-    ):
-        """Select a device to edit or remove."""
 
-        devices = self.config_entry.data.get(
-            "devices",
-            []
-        )
 
-        if not devices:
-            return self.async_abort(
-                reason="no_devices",
-            )
 
-        if user_input is not None:
-            self._selected_device_id = user_input[
-                "device_id"
-            ]
-
-            self._selected_device = next(
-                device
-                for device in devices
-                if device["id"]
-                == self._selected_device_id
-            )
-
-            if user_input["action"] == "delete":
-                return await self.async_step_device_delete()
-
-            return await self.async_step_device_settings()
-
-        device_options = {
-            device["id"]: device["name"]
-            for device in devices
-        }
-
-        schema = vol.Schema(
-            {
-                vol.Required(
-                    "device_id"
-                ): selector.SelectSelector(
-                    selector.SelectSelectorConfig(
-                        options=[
-                            {
-                                "value": device_id,
-                                "label": device_name,
-                            }
-                            for device_id, device_name
-                            in device_options.items()
-                        ],
-                        mode=selector.SelectSelectorMode.DROPDOWN,
-                    )
-                ),
-                vol.Required(
-                    "action",
-                    default="edit",
-                ): selector.SelectSelector(
-                    selector.SelectSelectorConfig(
-                        options=["edit", "delete"],
-                        mode=selector.SelectSelectorMode.LIST,
-                        translation_key="device_action",
-                    )
-                ),
-            }
-        )
-
-        return self.async_show_form(
-            step_id="device",
-            data_schema=schema,
-        )
-
-    def _prepare_legacy_generated_resources(
-        self,
-        device: dict,
-    ) -> dict:
-        """Populate ownership for resources created by older OGP versions.
-
-        This is intentionally limited to resources we know were created by
-        the first S32 implementation. It does not guess or delete arbitrary
-        user entities.
-        """
-
-        generated = dict(
-            device.get(
-                "generated_resources",
-                {},
-            )
-        )
-
-        generated["entities"] = list(
-            generated.get(
-                "entities",
-                [],
-            )
-        )
-        generated["automations"] = list(
-            generated.get(
-                "automations",
-                [],
-            )
-        )
-        generated["helpers"] = list(
-            generated.get(
-                "helpers",
-                [],
-            )
-        )
-
-        # Legacy devices may predate generated_resources ownership.
-        # Reconstruct ownership from the device name instead of a
-        # device-specific entity ID.
-        if not generated["entities"]:
-            slug = slugify(device.get("name", ""))
-            if slug:
-                legacy_entities = [
-                    f"binary_sensor.{slug}_off_grid_protection_locked",
-                    f"number.{slug}_override_duration",
-                    f"sensor.{slug}_override_remaining",
-                    f"text.{slug}_override_pin",
-                ]
-
-                generated["entities"].extend(
-                    entity_id
-                    for entity_id in legacy_entities
-                    if entity_id not in generated["entities"]
-                )
-
-        device["generated_resources"] = generated
-
-        return generated
-
-    async def async_step_device_delete(
-        self,
-        user_input=None,
-    ):
-        """Confirm removal and cleanup of a device."""
-
-        device = self._selected_device
-
-        generated = self._prepare_legacy_generated_resources(
-            device
-        )
-
-        generated_entities = list(
-            generated.get(
-                "entities",
-                [],
-            )
-        )
-
-        generated_automations = list(
-            generated.get(
-                "automations",
-                [],
-            )
-        )
-
-        generated_helpers = list(
-            generated.get(
-                "helpers",
-                [],
-            )
-        )
-
-        if user_input is not None:
-            if not user_input["confirm"]:
-                return self.async_abort(
-                    reason="delete_cancelled",
-                )
-
-            await self._cleanup_generated_resources(
-                device
-            )
-
-            devices = list(
-                self.config_entry.data.get(
-                    "devices",
-                    [],
-                )
-            )
-
-            devices = [
-                existing
-                for existing in devices
-                if existing["id"] != device["id"]
-            ]
-
-            new_data = dict(
-                self.config_entry.data
-            )
-
-            new_data["devices"] = devices
-
-            self.hass.config_entries.async_update_entry(
-                self.config_entry,
-                data=new_data,
-            )
-
-            return self.async_create_entry(
-                title="",
-                data={},
-            )
-
-        generated_resources = (
-            generated_entities
-            + generated_helpers
-            + generated_automations
-        )
-
-        if generated_resources:
-            resources = "\n".join(
-                f"- {resource}"
-                for resource in generated_resources
-            )
-        else:
-            resources = "—"
-
-        schema = vol.Schema(
-            {
-                vol.Required(
-                    "confirm",
-                    default=False,
-                ): bool,
-            }
-        )
-
-        return self.async_show_form(
-            step_id="device_delete",
-            data_schema=schema,
-            description_placeholders={
-                "device_name": device["name"],
-                "resources": resources,
-            },
-        )
-
-    async def _cleanup_generated_resources(
-        self,
-        device: dict,
-    ) -> None:
-        """Remove only resources owned by OGP."""
-
-        generated = device.get(
-            "generated_resources",
-            {},
-        )
-
-        # Remove entity-registry entries recorded by OGP.
-        from homeassistant.helpers import entity_registry as er
-
-        registry = er.async_get(self.hass)
-
-        for entity_id in generated.get(
-            "entities",
-            [],
-        ):
-            if registry.async_get(entity_id):
-                registry.async_remove(entity_id)
-
-        # Remove helpers recorded by OGP if they are registry entities.
-        for entity_id in generated.get(
-            "helpers",
-            [],
-        ):
-            if registry.async_get(entity_id):
-                registry.async_remove(entity_id)
-
-        # Automations will only be removed when OGP explicitly recorded
-        # them as generated. Existing automations in device["automations"]
-        # are intentionally NOT touched.
-        for automation_id in generated.get(
-            "automations",
-            [],
-        ):
-            if self.hass.services.has_service(
-                "automation",
-                "delete",
-            ):
-                await self.hass.services.async_call(
-                    "automation",
-                    "delete",
-                    {
-                        "entity_id": automation_id,
-                    },
-                    blocking=True,
-                )
 
 
     async def async_step_device_settings(
@@ -1751,7 +1736,12 @@ class OffGridProtectionOptionsFlow(
     ):
         """Edit the selected device."""
 
-        device = self._selected_device
+        device = dict(
+            self.config_entry.data.get(
+                "device",
+                {},
+            )
+        )
         device_type = device["type"]
 
         if user_input is not None:
@@ -1841,27 +1831,14 @@ class OffGridProtectionOptionsFlow(
                 )
             )
 
-            devices = list(
-                self.config_entry.data.get(
-                    "devices",
-                    [],
-                )
-            )
-
-            for index, existing_device in enumerate(
-                devices
-            ):
-                if existing_device["id"] == device["id"]:
-                    devices[index] = updated_device
-                    break
-
             new_data = dict(
                 self.config_entry.data
             )
-            new_data["devices"] = devices
+            new_data["device"] = updated_device
 
             self.hass.config_entries.async_update_entry(
                 self.config_entry,
+                title=updated_device["name"],
                 data=new_data,
             )
 

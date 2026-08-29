@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from functools import partial
 from pathlib import Path
+import json
 import re
 from typing import Any
 
@@ -202,129 +203,245 @@ def _popup_action(
     }
 
 
+async def _load_notification_texts(
+    hass: HomeAssistant,
+    language: str,
+) -> dict[str, str]:
+    """Load notification texts without blocking the event loop."""
+
+    translation_path = (
+        Path(__file__).parent
+        / "translations"
+        / f"{language}.json"
+    )
+
+    data = await hass.async_add_executor_job(
+        lambda: translation_path.read_text(
+            encoding="utf-8",
+        )
+    )
+    translations = json.loads(data)
+
+    return translations.get(
+        "notification_messages",
+        {},
+    )
+
+
 def _build_automation(
     *,
     automation_id: str,
     inverter_entity: str,
     notification_types: list[str],
+    notification_events: list[str],
     notify_targets: list[str],
     browser_mod_targets: list[str],
-    language: str,
+    texts: dict[str, str],
 ) -> dict[str, Any]:
-    """Build the central OGP house-status automation."""
-    if language == "hr":
-        alias = (
-            "OGP - Obavijest o stanju napajanja kuće"
-        )
-        description = (
-            "Prikazuje obavijest pri promjeni "
-            "između mrežnog i baterijskog rada kuće."
-        )
-        off_title = "⚡ KUĆA – OFF-GRID"
-        off_message = "Baterijski rad."
-        on_title = "🏠 KUĆA – MREŽA"
-        on_message = "Mrežni rad."
-    else:
-        alias = (
-            "OGP - House Power Status Notification"
-        )
-        description = (
-            "Notifies selected targets when the house "
-            "changes between grid and battery operation."
-        )
-        off_title = "⚡ HOUSE – OFF-GRID"
-        off_message = "Battery operation."
-        on_title = "🏠 HOUSE – GRID"
-        on_message = "Grid operation."
+    """Build the central OGP notification automation."""
 
-    off_actions: list[dict[str, Any]] = []
-    on_actions: list[dict[str, Any]] = []
+    def text(key: str) -> str:
+        return texts.get(key, key)
 
-    if "notify" in notification_types:
-        for target in notify_targets:
-            off_actions.append(
-                _notify_action(
-                    target,
-                    off_title,
-                    off_message,
+    def notify_actions(title: str, message: str) -> list[dict[str, Any]]:
+        actions: list[dict[str, Any]] = []
+
+        effective_notification_types = set(
+            notification_types
+        )
+
+        # Keep saved configurations compatible with the UI: if recipients
+        # exist, notifications are enabled even if an older entry did not
+        # persist the corresponding type flag.
+        if notify_targets:
+            effective_notification_types.add("notify")
+
+        if browser_mod_targets:
+            effective_notification_types.add("popup")
+
+        if "notify" in effective_notification_types:
+            for target in notify_targets:
+                actions.append(
+                    _notify_action(
+                        target,
+                        title,
+                        message,
+                    )
                 )
-            )
-            on_actions.append(
-                _notify_action(
-                    target,
-                    on_title,
-                    on_message,
+
+        if "popup" in effective_notification_types:
+            actions.append(
+                _popup_action(
+                    browser_mod_targets,
+                    title,
+                    message,
                 )
             )
 
-    if "popup" in notification_types:
-        off_actions.append(
-            _popup_action(
-                browser_mod_targets,
-                off_title,
-                off_message,
-            )
-        )
-        on_actions.append(
-            _popup_action(
-                browser_mod_targets,
-                on_title,
-                on_message,
-            )
-        )
+        return actions
 
-    state_expression = (
-        "trigger.to_state.state | lower "
-        "| replace('-', '_') | replace(' ', '_')"
-    )
+    triggers: list[dict[str, Any]] = []
+
+    if "grid" in notification_events:
+        triggers.append({
+            "trigger": "state",
+            "entity_id": inverter_entity,
+            "id": "grid_status",
+        })
+
+    if "protection" in notification_events:
+        triggers.extend([
+            {
+                "trigger": "event",
+                "event_type": "off_grid_protection_recovery",
+                "id": "recovery_event",
+            },
+            {
+                "trigger": "event",
+                "event_type": "off_grid_protection_override",
+                "event_data": {"action": "activated"},
+                "id": "override_activated",
+            },
+            {
+                "trigger": "event",
+                "event_type": "off_grid_protection_override",
+                "event_data": {"action": "expired"},
+                "id": "override_expired",
+            },
+            {
+                "trigger": "event",
+                "event_type": "off_grid_protection_override",
+                "event_data": {"action": "grid_return"},
+                "id": "override_grid_return",
+            },
+            {
+                "trigger": "event",
+                "event_type": "off_grid_protection_locked",
+                "id": "protection_locked",
+            },
+        ])
+
+    if "security" in notification_events:
+        triggers.append({
+            "trigger": "event",
+            "event_type": "off_grid_protection_security",
+            "id": "security_event",
+        })
+
+    choose: list[dict[str, Any]] = []
+
+    if "grid" in notification_events:
+        choose.extend([
+            {
+                "conditions": [
+                    {
+                        "condition": "template",
+                        "value_template": (
+                            "{{ trigger.id == 'grid_status' and "
+                            "trigger.to_state.state | lower "
+                            "| replace('-', '_') | replace(' ', '_') "
+                            "in ['off_grid', 'offgrid', 'island', 'islanding'] }}"
+                        ),
+                    }
+                ],
+                "sequence": notify_actions(
+                    text("grid_off_title"),
+                    text("grid_off_message"),
+                ),
+            },
+            {
+                "conditions": [
+                    {
+                        "condition": "template",
+                        "value_template": (
+                            "{{ trigger.id == 'grid_status' and "
+                            "trigger.to_state.state | lower "
+                            "| replace('-', '_') | replace(' ', '_') "
+                            "in ['on_grid', 'ongrid', 'grid', 'normal', 'connected'] }}"
+                        ),
+                    }
+                ],
+                "sequence": notify_actions(
+                    text("grid_on_title"),
+                    text("grid_on_message"),
+                ),
+            },
+        ])
+
+    if "protection" in notification_events:
+        choose.extend([
+            {
+                "conditions": [{"condition": "trigger", "id": "override_activated"}],
+                "sequence": notify_actions(
+                    text("override_title"),
+                    text("override_message"),
+                ),
+            },
+            {
+                "conditions": [{"condition": "trigger", "id": "override_expired"}],
+                "sequence": notify_actions(
+                    text("override_expired_title"),
+                    text("override_expired_message"),
+                ),
+            },
+            {
+                "conditions": [{"condition": "trigger", "id": "override_grid_return"}],
+                "sequence": notify_actions(
+                    text("override_grid_return_title"),
+                    text("override_grid_return_message"),
+                ),
+            },
+            {
+                "conditions": [{"condition": "trigger", "id": "protection_locked"}],
+                "sequence": notify_actions(
+                    text("locked_title"),
+                    text("locked_message"),
+                ),
+            },
+            {
+                "conditions": [
+                    {
+                        "condition": "template",
+                        "value_template": (
+                            "{{ trigger.id == 'recovery_event' and "
+                            "trigger.event.data.action == 'completed' }}"
+                        ),
+                    }
+                ],
+                "sequence": notify_actions(
+                    text("recovery_title"),
+                    text("recovery_message"),
+                ),
+            },
+        ])
+
+    if "security" in notification_events:
+        choose.append({
+            "conditions": [
+                {
+                    "condition": "template",
+                    "value_template": (
+                        "{{ trigger.id == 'security_event' and "
+                        "trigger.event.data.action == 'invalid_pin' }}"
+                    ),
+                }
+            ],
+            "sequence": notify_actions(
+                text("invalid_pin_title"),
+                text("invalid_pin_message"),
+            ),
+        })
 
     return {
         "id": automation_id,
-        "alias": alias,
-        "description": description,
-        "triggers": [
-            {
-                "trigger": "state",
-                "entity_id": inverter_entity,
-            }
-        ],
+        "alias": text("automation_alias"),
+        "description": text("automation_description"),
+        "triggers": triggers,
         "conditions": [],
-        "actions": [
-            {
-                "choose": [
-                    {
-                        "conditions": [
-                            {
-                                "condition": "template",
-                                "value_template": (
-                                    f"{{{{ {state_expression} "
-                                    "in ['off_grid', 'offgrid', "
-                                    "'island', 'islanding'] }}"
-                                ),
-                            }
-                        ],
-                        "sequence": off_actions,
-                    },
-                    {
-                        "conditions": [
-                            {
-                                "condition": "template",
-                                "value_template": (
-                                    f"{{{{ {state_expression} "
-                                    "in ['on_grid', 'ongrid', "
-                                    "'grid', 'normal', "
-                                    "'connected'] }}"
-                                ),
-                            }
-                        ],
-                        "sequence": on_actions,
-                    },
-                ]
-            }
-        ],
-        "mode": "restart",
+        "actions": [{"choose": choose}] if choose else [],
+        "mode": "queued",
+        "max": 20,
     }
-
 
 def _read_text(path: Path) -> str:
     """Read a text file in the executor thread."""
@@ -348,18 +465,25 @@ async def async_generate_house_status_automation(
     automation_id: str,
     inverter_entity: str,
     notification_types: list[str],
+    notification_events: list[str],
     notify_targets: list[str],
     browser_mod_targets: list[str],
     language: str,
 ) -> str:
     """Create or replace the OGP central notification automation."""
+    texts = await _load_notification_texts(
+        hass,
+        language,
+    )
+
     automation = _build_automation(
         automation_id=automation_id,
         inverter_entity=inverter_entity,
         notification_types=notification_types,
+        notification_events=notification_events,
         notify_targets=notify_targets,
         browser_mod_targets=browser_mod_targets,
-        language=language,
+        texts=texts,
     )
 
     path = _automation_file(hass)

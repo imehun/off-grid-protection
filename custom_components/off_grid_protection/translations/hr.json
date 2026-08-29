@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "OGP – Off-grid Protection",
-        "description": "Konfigurirajte OGP – Off-grid Protection.\n\n© 2006 by Igor M.",
+        "description": "Konfigurirajte OGP – Off-grid Protection.",
         "data": {
           "name": "Naziv"
         }
@@ -17,7 +17,7 @@
       },
       "central": {
         "title": "Centralna konfiguracija",
-        "description": "Konfigurirajte centralni OGP sustav.\n\n© 2006 by Igor M.",
+        "description": "Konfigurirajte centralni OGP sustav.",
         "data": {
           "inverter_off_grid_status": "Inverter Off-grid Status",
           "power_meter_status": "Power Meter Status",
@@ -25,7 +25,8 @@
           "central_pin": "Centralni PIN",
           "pin_check": "Provjera PIN-a",
           "recovery_enabled": "Automatski oporavak",
-          "logs": "Logovi"
+          "logs": "Logovi",
+          "notifications_enabled": "Omogući obavijesti"
         },
         "data_description": {
           "inverter_off_grid_status": "Senzor koji javlja je li inverter na mreži ili izvan mreže.",
@@ -104,9 +105,9 @@
       },
       "generate": {
         "title": "Generiranje Lovelace YAML-a",
-        "description": "Potvrdite generiranje Lovelace YAML uputa.",
+        "description": "Po želji generirajte Lovelace YAML upute za ovaj uređaj.",
         "data": {
-          "confirm_generate": "Potvrdi generiranje"
+          "generate_lovelace_yaml": "Generiraj Lovelace YAML"
         }
       },
       "central_notifications": {
@@ -117,14 +118,20 @@
           "browser_mod_targets": "Browser Mod uređaji",
           "notification_language": "Jezik obavijesti",
           "send_notification": "Pošalji obavijest",
-          "send_popup": "Prikaži Browser Mod popup"
+          "send_popup": "Prikaži Browser Mod popup",
+          "notify_grid_status": "Obavijesti o statusu mreže",
+          "notify_protection_status": "Obavijesti o zaštiti i Override statusu",
+          "notify_security": "Obavijesti o sigurnosnim događajima"
         },
         "data_description": {
           "notify_targets": "Odaberite jedan ili više dostupnih notify primatelja.",
           "browser_mod_targets": "Odaberite jedan ili više Browser Mod uređaja za popup.",
           "notification_language": "Jezik generirane OGP automatizacije i poruka.",
           "send_notification": "Pošalji obavijest na odabrane notify primatelje pri promjeni režima rada kuće.",
-          "send_popup": "Prikaži Browser Mod popup na odabranim uređajima pri promjeni režima rada kuće."
+          "send_popup": "Prikaži Browser Mod popup na odabranim uređajima pri promjeni režima rada kuće.",
+          "notify_grid_status": "Šalji obavijesti kada kuća promijeni rad između mreže i baterije.",
+          "notify_protection_status": "Šalji obavijesti kada se uređaj zaključa ili Override započne ili završi.",
+          "notify_security": "Šalji obavijesti za odbijene pokušaje Overridea zbog neispravnog PIN-a."
         }
       }
     },
@@ -164,21 +171,6 @@
           "logs": "Omogući OGP operativne poruke u Home Assistant System Logu."
         }
       },
-      "device": {
-        "title": "Odabir uređaja",
-        "description": "Odaberite uređaj koji želite urediti ili obrisati.",
-        "data": {
-          "device_id": "Uređaj",
-          "action": "Radnja"
-        }
-      },
-      "device_delete": {
-        "title": "Brisanje uređaja",
-        "description": "⚠️ **Obrisati uređaj {device_name}?**\n\nOGP će ukloniti konfiguraciju uređaja i samo resurse koje je OGP zabilježio kao generirane.\n\n**Generirani OGP resursi:**\n{resources}\n\nPostojeće korisničke automatizacije koje su samo odabrane u OGP-u neće biti obrisane.",
-        "data": {
-          "confirm": "Potvrdi brisanje"
-        }
-      },
       "device_settings": {
         "title": "Postavke uređaja",
         "description": "Uredite konfiguraciju ovog uređaja.",
@@ -209,21 +201,38 @@
           "browser_mod_targets": "Browser Mod uređaji",
           "notification_language": "Jezik obavijesti",
           "send_notification": "Pošalji obavijest",
-          "send_popup": "Prikaži Browser Mod popup"
+          "send_popup": "Prikaži Browser Mod popup",
+          "notify_grid_status": "Obavijesti o statusu mreže",
+          "notify_protection_status": "Obavijesti o zaštiti i Override statusu",
+          "notify_security": "Obavijesti o sigurnosnim događajima"
         },
         "data_description": {
           "notify_targets": "Odaberite jedan ili više dostupnih notify primatelja.",
           "browser_mod_targets": "Odaberite jedan ili više Browser Mod uređaja za popup.",
           "notification_language": "Jezik generirane OGP automatizacije i poruka.",
           "send_notification": "Pošalji obavijest na odabrane notify primatelje pri promjeni režima rada kuće.",
-          "send_popup": "Prikaži Browser Mod popup na odabranim uređajima pri promjeni režima rada kuće."
+          "send_popup": "Prikaži Browser Mod popup na odabranim uređajima pri promjeni režima rada kuće.",
+          "notify_grid_status": "Šalji obavijesti kada kuća promijeni rad između mreže i baterije.",
+          "notify_protection_status": "Šalji obavijesti kada se uređaj zaključa ili Override započne ili završi.",
+          "notify_security": "Šalji obavijesti za odbijene pokušaje Overridea zbog neispravnog PIN-a."
+        }
+      },
+      "device_options": {
+        "title": "Postavke uređaja",
+        "description": "Odaberite što želite konfigurirati za ovaj uređaj.",
+        "data": {
+          "action": "Radnja"
+        }
+      },
+      "regenerate_lovelace_yaml": {
+        "title": "Ponovno generiranje Lovelace YAML-a",
+        "description": "Odaberite jezik generiranog Lovelace YAML-a.",
+        "data": {
+          "lovelace_language": "Jezik Lovelace YAML-a"
         }
       }
     },
-    "abort": {
-      "no_devices": "**Nema uređaja**\n\nJoš nije dodan nijedan uređaj.",
-      "delete_cancelled": "**Brisanje otkazano**\n\nUređaj nije obrisan."
-    }
+    "abort": {}
   },
   "selector": {
     "configuration_type": {
@@ -251,6 +260,62 @@
       "options": {
         "turn_off": "Isključi"
       }
+    },
+    "lovelace_language": {
+      "options": {
+        "en": "Engleski",
+        "hr": "Hrvatski"
+      }
+    },
+    "device_options_action": {
+      "options": {
+        "device_settings": "Postavke uređaja",
+        "regenerate_lovelace_yaml": "Ponovno generiraj Lovelace YAML"
+      }
+    },
+    "log_level": {
+      "options": {
+        "off": "Isključeno",
+        "warnings": "Upozorenja",
+        "debug": "Debug"
+      }
     }
+  },
+  "entity": {
+    "sensor": {
+      "protection_status": {
+        "name": "Status zaštite",
+        "state": {
+          "ready": "Spremno",
+          "locked": "Zaključano",
+          "override": "Override"
+        },
+        "state_attributes": {
+          "remaining": {
+            "name": "Preostalo"
+          }
+        }
+      }
+    }
+  },
+  "notification_messages": {
+    "automation_alias": "OGP - Obavijesti o zaštiti baterijskog sustava",
+    "automation_description": "Obavještava odabrana odredišta o promjenama mrežnog rada, statusa zaštite, Overridea i sigurnosnim događajima.",
+    "grid_off_title": "⚡ KUĆA – OFF-GRID",
+    "grid_off_message": "Baterijski rad.",
+    "grid_on_title": "🏠 KUĆA – ON-GRID",
+    "grid_on_message": "Mrežni rad.",
+    "override_title": "🔓 OGP – OVERRIDE",
+    "override_message": "Uređaj {{ trigger.event.data.device_name }} je otključan. Trajanje: {{ trigger.event.data.duration_minutes }} min.",
+    "override_expired_title": "🔒 OGP – ZAŠTITA",
+    "override_expired_message": "Override za uređaj {{ trigger.event.data.device_name }} je istekao. Uređaj je ponovno zaključan.",
+    "override_grid_return_title": "🔒 OGP – ZAŠTITA",
+    "override_grid_return_message": "Mreža se vratila. Override za uređaj {{ trigger.event.data.device_name }} je završen.",
+    "locked_title": "🔒 OGP – ZAKLJUČANO",
+    "locked_message": "Uređaj {{ trigger.event.data.device_name }} je zaključan.",
+    "invalid_pin_title": "⚠️ OGP – POGREŠAN PIN",
+    "invalid_pin_message": "Neispravan PIN za Override uređaja {{ trigger.event.data.device_name }}.",
+    "recovery_title": "🔄 OGP – OPORAVAK",
+    "recovery_message": "Oporavak nakon povratka mreže je završen. Zaštita baterije vraćena je u normalan rad."
   }
 }

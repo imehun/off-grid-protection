@@ -1,6 +1,6 @@
 {
   "domain": "off_grid_protection",
-  "name": "OGP - Off-grid Protection",
+  "name": "OGP – Off-grid Battery Protection",
   "codeowners": [
     "@imehun"
   ],
@@ -10,5 +10,5 @@
   "iot_class": "calculated",
   "issue_tracker": "https://github.com/imehun/off-grid-protection/issues",
   "requirements": [],
-  "version": "1.1.2"
+  "version": "1.1.3"
 }

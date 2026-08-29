@@ -26,6 +26,28 @@ _LOGGER = logging.getLogger(__name__)
 SYNC_INTERVAL = timedelta(seconds=5)
 
 
+def normalize_log_level(
+    value: str | bool | None,
+) -> str:
+    """Normalize the stored OGP log setting."""
+
+    # Backward compatibility with the boolean setting used by older versions.
+    if isinstance(value, bool):
+        return "warnings" if value else "off"
+
+    normalized = str(value or "").strip().lower()
+
+    if normalized in (
+        "off",
+        "warnings",
+        "debug",
+    ):
+        return normalized
+
+    # Unknown/missing values keep the safe operational default.
+    return "warnings"
+
+
 class OffGridCoordinator:
     """Coordinate the Off-grid Protection runtime."""
 
@@ -33,13 +55,13 @@ class OffGridCoordinator:
         self,
         hass: HomeAssistant,
         central: OffGridCentral,
-        logs_enabled: bool = True,
+        logs_level: str | bool = "warnings",
     ) -> None:
         """Initialize the coordinator."""
 
         self.hass = hass
         self.central = central
-        self._logs_enabled = bool(logs_enabled)
+        self._logs_level = normalize_log_level(logs_level)
 
         self.runtime = OffGridRuntime()
 
@@ -61,9 +83,19 @@ class OffGridCoordinator:
         self._initialize_grid_status()
 
 
-    def set_logs_enabled(self, enabled: bool) -> None:
-        """Enable or disable OGP operational logging."""
-        self._logs_enabled = bool(enabled)
+    def set_logs_level(
+        self,
+        level: str | bool,
+    ) -> None:
+        """Set the OGP operational logging level."""
+        self._logs_level = normalize_log_level(level)
+
+    def set_logs_enabled(
+        self,
+        enabled: bool,
+    ) -> None:
+        """Backward-compatible logging switch."""
+        self.set_logs_level(enabled)
 
     def _log(
         self,
@@ -71,8 +103,15 @@ class OffGridCoordinator:
         message: str,
         *args,
     ) -> None:
-        """Write an OGP log message when logging is enabled."""
-        if not self._logs_enabled:
+        """Write an OGP log message according to the configured level."""
+
+        if self._logs_level == "off":
+            return
+
+        if (
+            self._logs_level == "warnings"
+            and level < logging.WARNING
+        ):
             return
 
         _LOGGER.log(
@@ -920,6 +959,14 @@ class OffGridCoordinator:
 
             runtime.locked = True
 
+            self.hass.bus.async_fire(
+                "off_grid_protection_locked",
+                {
+                    "device_id": device.id,
+                    "device_name": device.name,
+                },
+            )
+
         self._notify_listeners()
 
         self._log(logging.WARNING, 
@@ -985,6 +1032,15 @@ class OffGridCoordinator:
                     device.name,
                 )
 
+                self.hass.bus.async_fire(
+                    "off_grid_protection_security",
+                    {
+                        "action": "invalid_pin",
+                        "device_id": device.id,
+                        "device_name": device.name,
+                    },
+                )
+
                 return False
 
         duration = int(duration_minutes)
@@ -1044,6 +1100,16 @@ class OffGridCoordinator:
             runtime.state == device.off_state
         )
 
+        self.hass.bus.async_fire(
+            "off_grid_protection_override",
+            {
+                "action": "activated",
+                "device_id": device.id,
+                "device_name": device.name,
+                "duration_minutes": duration,
+            },
+        )
+
         self._notify_listeners()
 
         self._log(logging.WARNING, 
@@ -1097,6 +1163,15 @@ class OffGridCoordinator:
             runtime.override_started_at = None
             runtime.override_duration_minutes = 0
 
+            self.hass.bus.async_fire(
+                "off_grid_protection_override",
+                {
+                    "action": "grid_return",
+                    "device_id": device.id,
+                    "device_name": device.name,
+                },
+            )
+
             self._notify_listeners()
 
             self._log(logging.WARNING, 
@@ -1111,6 +1186,15 @@ class OffGridCoordinator:
         runtime.override_started_at = None
         runtime.override_duration_minutes = 0
         runtime.locked = True
+
+        self.hass.bus.async_fire(
+            "off_grid_protection_override",
+            {
+                "action": "expired",
+                "device_id": device.id,
+                "device_name": device.name,
+            },
+        )
 
         self._notify_listeners()
 
@@ -1389,17 +1473,42 @@ class OffGridCoordinator:
 
         self._refresh_all_device_states()
 
+        self._log(
+            logging.DEBUG,
+            "OFF-GRID RECOVERY: "
+            "configured devices=%s",
+            [
+                device.name
+                for device in self.central.devices
+            ],
+        )
+
         for device in self.central.devices:
             runtime = self.runtime.get_device(
                 device.id
             )
 
             if runtime is None:
+                self._log(
+                    logging.ERROR,
+                    "OFF-GRID RECOVERY: "
+                    "DEVICE SKIPPED: %s -> runtime missing",
+                    device.name,
+                )
                 continue
 
             runtime.recovery_started = True
 
-            self._log(logging.WARNING, 
+            self._log(
+                logging.DEBUG,
+                "OFF-GRID RECOVERY: DEVICE START: %s -> state=%s, available=%s",
+                device.name,
+                runtime.state,
+                runtime.available,
+            )
+
+            self._log(
+                logging.DEBUG,
                 "OFF-GRID RECOVERY: "
                 "DEVICE: %s -> state=%s, available=%s",
                 device.name,
@@ -1413,6 +1522,12 @@ class OffGridCoordinator:
             )
 
             runtime.recovery_completed = True
+
+            self._log(
+                logging.DEBUG,
+                "OFF-GRID RECOVERY: DEVICE COMPLETE: %s",
+                device.name,
+            )
 
             self._log(logging.WARNING, 
                 "OFF-GRID RECOVERY: "
@@ -1441,6 +1556,13 @@ class OffGridCoordinator:
             device.recovery_completed = False
 
         self._notify_listeners()
+
+        self.hass.bus.async_fire(
+            "off_grid_protection_recovery",
+            {
+                "action": "completed",
+            },
+        )
 
         self._log(logging.WARNING, 
             "OFF-GRID RECOVERY: "

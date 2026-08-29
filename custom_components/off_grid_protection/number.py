@@ -84,6 +84,13 @@ class OffGridOverrideDurationNumber(
             f"{device_name} Override Duration"
         )
 
+        self._attr_device_info = {
+            "identifiers": {
+                (DOMAIN, device_id)
+            },
+            "name": device_name,
+        }
+
         self._attr_native_min_value = (
             device.minimum_runtime
         )

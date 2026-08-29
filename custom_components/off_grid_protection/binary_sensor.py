@@ -75,6 +75,13 @@ class OffGridLockedBinarySensor(
             f"{device_name} Off-grid Protection Locked"
         )
 
+        self._attr_device_info = {
+            "identifiers": {
+                (DOMAIN, device_id)
+            },
+            "name": device_name,
+        }
+
     @property
     def available(self) -> bool:
         """Return whether the entity is available."""

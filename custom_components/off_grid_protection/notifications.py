@@ -211,8 +211,7 @@ async def _load_notification_texts(
 
     translation_path = (
         Path(__file__).parent
-        / "translations"
-        / f"{language}.json"
+        / "notification_messages.json"
     )
 
     data = await hass.async_add_executor_job(
@@ -222,10 +221,14 @@ async def _load_notification_texts(
     )
     translations = json.loads(data)
 
-    return translations.get(
-        "notification_messages",
-        {},
-    )
+    messages = translations.get(language, {})
+    if not isinstance(messages, dict):
+        return {}
+
+    return {
+        str(key): str(value)
+        for key, value in messages.items()
+    }
 
 
 def _build_automation(

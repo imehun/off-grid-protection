@@ -511,7 +511,10 @@ def _get_central_entry(
 ) -> ConfigEntry | None:
     """Return the single OGP central Entry."""
     for entry in hass.config_entries.async_entries(DOMAIN):
-        if entry.data.get("type") == "central":
+        if (
+            entry.data.get("type") == "central"
+            and entry.disabled_by is None
+        ):
             return entry
     return None
 
@@ -560,7 +563,11 @@ async def async_setup_entry(
             central_entry_id
         )
 
-        if central_entry is None:
+        if (
+            central_entry is None
+            or central_entry.disabled_by is not None
+            or entry.disabled_by is not None
+        ):
             return False
 
         coordinator = hass.data.get(
@@ -657,6 +664,9 @@ async def async_setup_entry(
             continue
 
         if device_entry.data.get("central_entry_id") != entry.entry_id:
+            continue
+
+        if device_entry.disabled_by is not None:
             continue
 
         device_data = device_entry.data.get(

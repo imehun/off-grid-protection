@@ -1,34 +1,42 @@
-# OGP -- Configuration Guide
+# OGP --- Configuration Guide
 
-Detailed configuration guide for OGP v1.1.3.
+Detailed configuration guide for OGP v1.1.4.
 
 ## 1. Requirements and optional components
 
-OGP core configuration and protection do not require Huawei Solar, Browser Mod, Button-card or Stack-in-card.
+OGP core configuration and protection do not require Huawei Solar,
+Browser Mod, Button-card or Stack-in-card.
 
 Optional components:
 
-- **Browser Mod** -- only for Browser Mod popup notifications.
-- **Button-card** -- recommended for the generated Override dashboard.
-- **Stack-in-card** -- recommended for the generated Override dashboard.
+-   **Browser Mod** --- only for Browser Mod popup notifications.
+-   **Button-card** --- recommended for the generated Override
+    dashboard.
+-   **Stack-in-card** --- recommended for the generated Override
+    dashboard.
 
-Home Assistant notifications do not require Browser Mod and may use available notification targets, including the Home Assistant notification panel.
+Home Assistant notifications do not require Browser Mod.
 
-The generated Lovelace YAML is a convenience template. It is not an OGP dependency and may be edited freely.
+The generated Lovelace YAML is a convenience template. It is not an OGP
+dependency and may be edited freely.
 
 ## 2. Protection model
 
-OGP protects the **battery system**, not individual devices.
+OGP protects the **battery system**, not individual users or Home
+Assistant permissions.
 
-Selected devices are existing Home Assistant loads. OGP monitors them and can turn them OFF during OFF-GRID operation.
+Each OGP Device Entry is independent.
 
-Selected user automations are part of the protection strategy. OGP remembers their state before protection, disables the selected automations that were enabled, and restores their previous state after recovery.
+If a Device Entry is disabled, OGP does not manage that device. Other
+enabled Device Entries continue to operate normally.
 
-If a selected load is nevertheless turned ON during OFF-GRID without an active Override, OGP turns it OFF again.
+For standard devices, selected user automations are part of the
+protection strategy. OGP stores their pre-protection state, disables
+selected automations that were enabled, and restores their previous
+state after recovery.
 
-### Race condition
-
-If a user automation is not selected, it can try to turn a load ON while OGP is trying to turn it OFF. This is a possible race condition. Select the user automations that can start relevant loads during OFF-GRID operation.
+If a protected device is turned ON during OFF-GRID without an active
+Override, OGP reasserts the configured shutdown action.
 
 ## 3. Central configuration
 
@@ -38,18 +46,18 @@ Select the entity reporting the inverter/main device operating mode.
 
 Recognized OFF-GRID states:
 
-- `off_grid`
-- `offgrid`
-- `island`
-- `islanding`
+-   `off_grid`
+-   `offgrid`
+-   `island`
+-   `islanding`
 
 Recognized ON-GRID states:
 
-- `on_grid`
-- `ongrid`
-- `grid`
-- `normal`
-- `connected`
+-   `on_grid`
+-   `ongrid`
+-   `grid`
+-   `normal`
+-   `connected`
 
 Other or unavailable states are treated as `UNKNOWN`.
 
@@ -57,257 +65,290 @@ Other or unavailable states are treated as `UNKNOWN`.
 
 Select the power-meter status entity used as an additional confirmation.
 
-If Power Meter Status becomes `unknown` or `unavailable`, OGP treats this as confirmation that the inverter/main device is OFF-GRID. This is intentional because the power meter can lose communication or power during the OFF-GRID transition.
+If Power Meter Status becomes `unknown` or `unavailable`, OGP treats
+this as confirmation that the inverter/main device is OFF-GRID. This is
+intentional because the power meter can lose communication or power
+during the OFF-GRID transition.
 
 ### 3.3 Recovery delay
 
-Configure the central delay used after ON-GRID returns, allowing the system to stabilize before recovery.
+Configure the central delay used after ON-GRID returns, allowing the
+system to stabilize before recovery.
 
-This is different from the device Recovery timeout.
+This differs from the Recovery timeout of an individual device.
 
 ### 3.4 Logs
 
-Central Setup provides three OGP logging levels:
+Central OGP logging can be:
 
-- **Off** -- OGP does not emit operational log messages.
-- **Warnings** -- important warning/error events are logged.
-- **Debug** -- warning/error events plus detailed diagnostic messages are logged.
+-   Off
+-   Warnings
+-   Debug
 
-Use **Debug** during initial configuration, testing and troubleshooting. After successful testing, use **Off** or **Warnings**.
-
-The OGP setting is the master switch for OGP operational logging. A Home Assistant logger set to DEBUG does not cause OGP messages to be emitted when OGP Logs is Off.
+Debug is intended for commissioning, testing and diagnostics.
 
 ### 3.5 Notifications
 
 Notifications are optional.
 
-The central notification configuration is opened as **House power status notifications**.
+Configure:
 
-It provides:
+-   notification enable/disable;
+-   Home Assistant notification targets;
+-   Browser Mod popup targets;
+-   notification categories;
+-   notification language.
 
-- **Send notification**;
-- **Notification recipients**;
-- **Show Browser Mod popup**;
-- **Browser Mod devices**;
-- notification categories for grid status, protection/Override status and security;
-- English or Croatian notification language.
+Notification settings are stored independently and persist through
+central configuration changes and Home Assistant restarts.
 
-Notification configuration is stored separately from Central Setup and is preserved when Central Setup is edited or Home Assistant is restarted.
+If OGP settings are changed, OGP can display a persistent notification
+recommending a Home Assistant restart. OGP does not restart Home
+Assistant automatically.
 
-In v1.1.3, the selected notification categories apply globally to the configured notification and Browser Mod targets. Per-target notification routing is not included in this version.
-
-### 3.6 Browser Mod popup
-
-Browser Mod popup is optional.
-
-Enable it only when Browser Mod is installed and popup presentation is desired.
-
-Normal Home Assistant notifications do not require Browser Mod.
+Initial `unavailable`/`unknown` → valid grid state transitions after
+Home Assistant startup are suppressed so they are not reported as normal
+grid changes.
 
 ## 4. Device Entry configuration
 
-A selected load is configured as a separate OGP Device Entry. Each Device Entry contains the main Home Assistant entity that OGP should monitor and control during battery protection.
+Each protected load is configured as a separate OGP Device Entry.
 
-### 4.1 Main entity
+### 4.1 Device Entry enabled/disabled
 
-Select the existing Home Assistant main entity. An entity already used as the main entity by another OGP Device Entry is not offered again.
+A Device Entry can be disabled without disabling the central OGP entry.
 
-### 4.2 OFF state
+When disabled, OGP does not:
 
-Configure the state that represents the load being OFF.
+-   shut down the device;
+-   perform safety reassertion;
+-   execute Override/recovery actions;
+-   manage the device as part of the active protection cycle.
 
-### 4.3 User automations
+The device remains available to Home Assistant and other integrations.
 
-Select existing user automations that could start this load during OFF-GRID operation.
+This is intended for development, testing and maintenance when a
+selected device should be completely outside OGP control.
 
-OGP stores the pre-protection state of the selected automations, disables those that were enabled, and restores their previous state during recovery.
+### 4.2 Device entity
+
+For Switch and Climate devices, select the main entity OGP should
+monitor and control.
+
+For a Custom Device, this is the **Device entity**: the entity OGP shuts
+down and continues to monitor during protection.
+
+The Custom Device entity is fully generic and is not restricted to a
+particular Home Assistant domain.
+
+### 4.3 OFF state
+
+Configure the state that represents the Device entity being OFF.
+
+### 4.4 User automations
+
+For standard Switch and Climate devices, select existing user
+automations that could start the device during OFF-GRID operation.
+
+OGP stores their state before protection, disables those that were
+enabled, and restores their previous state during recovery.
 
 Only selected automations are affected.
 
-### 4.4 Wait if unavailable
+A Custom Device does not require this automation selection for its
+Control entity mechanism.
 
-Enable this when the load can lose its own power or communication during the OFF-GRID transition.
+### 4.5 Custom Control entity
 
-A load may become `unavailable` because it lost its own power.
+Custom Device has a separate **Control entity**.
 
-With this option enabled, OGP waits for the load to return so that the required shutdown/lock handling can be verified and completed.
+The Control entity is completely generic and may be any Home Assistant
+entity suitable for the user's control strategy.
 
-UPS power is recommended for Home Assistant and network/communication equipment, but the load itself may still lose power.
+During OFF-GRID protection:
 
-### 4.5 Recovery timeout
+1.  OGP snapshots the Control entity state.
+2.  OGP performs the normal Device entity shutdown sequence.
+3.  OGP turns the Control entity OFF.
+4.  OGP continues monitoring the Device entity.
 
-This is the timeout for the selected load to return and complete the required shutdown/lock sequence.
+The Control entity can represent an entire external control integration.
+This avoids requiring OGP to manage every internal automation of that
+integration.
 
-If it does not return within this time, OGP reports that the load could not be shut down and locked.
+### 4.6 Custom recovery action
 
-The user must manually turn the load OFF. When OGP can confirm the OFF state, the load can proceed to the locked state.
+For Custom Device, select:
 
-### 4.6 Command timeout
+-   **Stay OFF** --- leave the Control entity OFF after recovery.
+-   **Turn ON** --- turn the Control entity ON after the normal recovery
+    sequence.
+
+The Device entity itself remains OFF according to the normal OGP
+recovery model.
+
+### 4.7 Wait if unavailable
+
+Enable this when the device can lose its own power or communication
+during the OFF-GRID transition.
+
+### 4.8 Recovery timeout
+
+Configure how long OGP waits for the required device state and
+protection sequence.
+
+If the device cannot be safely switched OFF and locked within the
+configured timeout, OGP reports the failure and the user must manually
+switch the device OFF.
+
+### 4.9 Command timeout
 
 Configure how long OGP waits for a device command to complete.
 
-Use a value appropriate for the device and its Home Assistant integration.
+## 5. Override
 
-## 5. Device settings and Lovelace YAML
+Override is a temporary exception to active OFF-GRID protection.
 
-Each OGP Device Entry has its own settings.
+It can use:
 
-The Device Entry can be reconfigured without changing the Central Entry.
+-   minimum runtime;
+-   maximum runtime;
+-   requested duration;
+-   PIN protection.
 
-### 5.1 Regenerate Lovelace YAML
+Override does not automatically turn the device ON. The user controls
+whether the device is actually enabled.
 
-Use **Regenerate Lovelace YAML** in the Device Entry settings when the generated dashboard YAML was accidentally removed or needs to be generated again.
+While Override is active, the normal safety reassertion is intentionally
+suspended for that device.
 
-The YAML language can be selected as English or Croatian.
+When Override expires, protection is restored and an ON device is shut
+down again.
 
-Regenerating the YAML does not recreate or reconfigure the Device Entry.
+## 6. OFF-GRID protection sequence
 
-When adding a new Device Entry, Lovelace YAML generation is optional. If the Lovelace YAML option is not selected, the Device Entry is still created normally.
+When OFF-GRID protection is confirmed:
 
-### 5.2 Device Entry removal
+1.  OGP confirms the OFF-GRID state.
+2.  For standard devices, OGP snapshots selected user automations.
+3.  Enabled selected automations are disabled.
+4.  Device states are checked.
+5.  Required shutdown actions are executed.
+6.  For Custom Devices, the Control entity is also turned OFF after its
+    state has been snapshotted.
+7.  Protection remains active.
+8.  Protected devices continue to be monitored.
+9.  If a protected Device entity is turned ON without Override, OGP
+    reasserts its shutdown action.
+10. Failure to safely complete shutdown is handled through the
+    configured timeout/failure mechanism.
 
-Device Entry removal uses the native Home Assistant Config Entry delete action.
-
-Removing a Device Entry does not remove the Central Entry or other OGP Device Entries.
-
-## 6. Override
-
-Override is an OGP function and does not require Browser Mod, Button-card or Stack-in-card.
-
-Override uses:
-
-- configurable duration;
-- PIN protection.
-
-Override does not automatically turn the load ON. After an accepted Override, the user can operate the load manually.
-
-The generated Lovelace Override interface supports entering the PIN and activating the Override. The PIN can be submitted through the normal Enter action or the generated action control.
-
-### Override dashboard
-
-Button-card and Stack-in-card are optional dashboard components recommended for the generated Lovelace Override interface.
-
-The generated YAML is only a starting template and can be modified.
-
-## 7. Generated Lovelace YAML
-
-When a selected load is created, OGP can generate a Lovelace YAML template.
-
-The template may reference:
-
-- Browser Mod;
-- Button-card;
-- Stack-in-card.
-
-These are not installed by OGP.
-
-If a referenced custom card is not installed, that dashboard configuration will not render correctly. OGP configuration and core protection remain independent of those dashboard components.
-
-## 8. OFF-GRID protection sequence
-
-When OFF-GRID operation is confirmed:
-
-1. Confirm OFF-GRID state.
-2. Capture the current state of selected user automations.
-3. Disable selected automations that were enabled.
-4. Check selected load states.
-5. Turn OFF selected loads when required.
-6. Continue monitoring selected loads.
-7. If a selected load turns ON without an active Override, turn it OFF again.
-8. Handle unavailable loads according to their configuration.
-9. Keep battery protection active while OFF-GRID.
-
-## 9. Recovery sequence
+## 7. Recovery sequence
 
 When ON-GRID is confirmed:
 
-1. Start recovery.
-2. Wait for the central Recovery delay.
-3. Confirm ON-GRID stability.
-4. Refresh selected load/protection states.
-5. Restore selected user automations to their pre-protection states.
-6. Clear the protection cycle.
+1.  Recovery starts.
+2.  Central Recovery delay is applied.
+3.  Stable ON-GRID is confirmed.
+4.  Device/protection state is refreshed.
+5.  Standard-device selected automations are restored to their
+    pre-protection states.
+6.  Custom Device Control entities follow their configured recovery
+    action.
+7.  The Device entity remains OFF according to the normal OGP recovery
+    model.
+8.  The protection cycle is cleared.
 
-If OFF-GRID returns during recovery, battery protection takes priority.
+If OFF-GRID returns during recovery, battery protection has priority.
 
-## 10. Huawei Solar and other integrations
+## 8. Safety reassertion and failure handling
 
-OGP was tested with entities provided by the Huawei Solar integration.
+OGP does not rely on a single shutdown command.
 
-Huawei Solar is **not an OGP dependency**. OGP does not include, install or distribute Huawei Solar source code.
+While protection is active, OGP continues monitoring protected Device
+entities.
 
-The same principle applies to other Home Assistant integrations. OGP is designed to work with Home Assistant entities that provide the required states and services.
+If a protected device turns ON without Override, OGP reasserts the
+configured shutdown action.
+
+If the device cannot be safely switched OFF or confirmed OFF within the
+applicable timeout, OGP reports that the device could not be safely shut
+down and locked. The user must manually switch it OFF.
+
+Override is the intentional exception to reassertion.
+
+## 9. Generated Lovelace YAML
+
+The generated Lovelace YAML is a starting template.
+
+It may use Browser Mod, Button-card and Stack-in-card, but these are not
+core OGP dependencies.
+
+Custom Device YAML may require user adaptation to the selected Device
+entity and desired interface.
+
+## 10. Device removal and resource ownership
+
+OGP tracks generated resources.
+
+When a Device Entry is removed, OGP removes only resources recorded as
+generated by OGP.
+
+Existing user resources are not deleted merely because OGP used or
+selected them.
 
 ## 11. Testing
 
-Before relying on OGP in an energy system, test:
+Before relying on OGP, test:
 
-- ON-GRID detection;
-- OFF-GRID detection;
-- Power Meter confirmation;
-- selected load OFF control;
-- selected automation disabling;
-- automation restoration;
-- device-state reassertion;
-- unavailable behavior;
-- Recovery timeout;
-- ON-GRID recovery;
-- correct Override PIN;
-- incorrect Override PIN;
-- Override duration and expiration;
-- Home Assistant notifications;
-- Browser Mod popup if enabled;
-- notification category selection;
-- notification configuration persistence after Central Setup changes;
-- notification configuration persistence after Home Assistant restart;
-- generated Lovelace interface if used;
-- OGP Logs Off / Warnings / Debug behavior.
-
-For detailed diagnostics, set OGP Logs to **Debug** and, if necessary, set the Home Assistant logger for `custom_components.off_grid_protection` to DEBUG. After testing, return OGP Logs to Off or Warnings.
+-   ON-GRID detection;
+-   OFF-GRID detection;
+-   Power Meter Status confirmation;
+-   standard Switch protection;
+-   standard Climate protection;
+-   Custom Device protection;
+-   Custom Control entity snapshot and OFF action;
+-   Custom recovery Stay OFF;
+-   Custom recovery Turn ON;
+-   disabled Device Entry behavior;
+-   safety reassertion;
+-   failure/timeout notification;
+-   Override;
+-   Override expiration;
+-   ON-GRID recovery;
+-   notification settings persistence;
+-   startup notification suppression;
+-   restart recommendation after changed settings;
+-   generated Lovelace UI if used.
 
 ## 12. Troubleshooting
 
-### Load does not turn OFF
+### Device is not controlled
 
-Check the selected entity, OFF state, availability, Home Assistant service support, Command timeout and the device integration.
+Check that the Device Entry is enabled, the entity is correct, the OFF
+state is correct, the entity is available and the configured Home
+Assistant action is supported.
 
-### Load turns ON again during OFF-GRID
+### Device turns ON during OFF-GRID
 
-Check whether the automation that starts it was selected in OGP. Selecting relevant automations is recommended to reduce race conditions.
+Check safety reassertion logs and whether an Override is active.
 
-### Load becomes unavailable
+### Custom Device does not disable its external control system
 
-Check its power supply, **Wait if unavailable**, Recovery timeout, and Home Assistant/network availability.
+Check the configured Control entity. It must be the entity that
+represents the external control system's enable/disable state.
 
-### No notification
+### Custom Device does not resume external control
 
-Check that notification sending is enabled, that at least one notification target is selected, and that the required notification category is enabled.
+Check that Custom recovery is set to **Turn ON** and that the Control
+entity supports the required ON action.
 
-### No popup
+### Device cannot be safely switched OFF
 
-Check Browser Mod installation, popup configuration, selected Browser Mod devices and Browser Mod client availability.
+Check the entity, OFF state, command timeout, Recovery timeout and
+device integration. If OGP reports a shutdown failure, manually switch
+the device OFF.
 
-Normal Home Assistant notifications do not require Browser Mod.
+### Too many logs
 
-### Notification settings disappear after editing Central Setup
-
-In v1.1.3, notification configuration is stored separately and should not be removed when Central Setup is edited. If it disappears, check the OGP logs and configuration entry state.
-
-### Lovelace does not render
-
-Check whether the generated YAML references Button-card, Stack-in-card or Browser Mod that are not installed. Install them or modify the YAML.
-
-### Too many log messages
-
-Use **Warnings** for normal operation or **Off** after testing. Use **Debug** only when detailed diagnostics are required.
-
-## 13. Version policy
-
-**v1.1.3 is the locked stable release.**
-
-Future development uses a new version number, for example:
-
-- `v1.1.4` -- bugfix
-- `v1.2.0` -- new functionality
-
-The v1.1.3 release remains the exact reference to the tested stable version.
+Use Warnings or Off after testing. Debug should be used for diagnostics.

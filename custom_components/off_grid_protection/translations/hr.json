@@ -64,14 +64,20 @@
       },
       "custom": {
         "title": "Konfiguracija Custom uređaja",
-        "description": "Konfigurirajte ponašanje gašenja i oporavka za ovaj Custom uređaj.",
+        "description": "Konfigurirajte generički entitet uređaja i upravljački entitet za ovaj Custom uređaj.",
         "data": {
-          "entity_id": "Entity",
+          "entity_id": "Entitet uređaja",
           "shutdown_action": "Akcija gašenja",
           "off_state": "OFF stanje",
           "wait_for_unavailable": "Čekaj ako je nedostupno",
           "recovery_timeout": "Timeout oporavka",
-          "command_timeout": "Timeout naredbe"
+          "command_timeout": "Timeout naredbe",
+          "recovery_action": "Akcija oporavka",
+          "control_entity_id": "Upravljački entitet"
+        },
+        "data_description": {
+          "recovery_action": "Akcija koja se primjenjuje na upravljački entitet nakon oporavka na mrežu.",
+          "control_entity_id": "Entitet kojim OGP isključuje Custom upravljanje i po potrebi ga ponovno uključuje tijekom oporavka."
         }
       },
       "automations": {
@@ -186,11 +192,13 @@
           "override_enabled": "Omogući Override",
           "require_pin": "Zahtijevaj PIN",
           "minimum_runtime": "Minimalno trajanje",
-          "maximum_runtime": "Maksimalno trajanje"
+          "maximum_runtime": "Maksimalno trajanje",
+          "recovery_action": "Akcija oporavka"
         },
         "data_description": {
           "automations": "Prikazuju se automatizacije koje referenciraju odabrani uređaj.",
-          "show_all_automations": "Prikaži sve Home Assistant automatizacije umjesto samo povezanih s odabranim uređajem."
+          "show_all_automations": "Prikaži sve Home Assistant automatizacije umjesto samo povezanih s odabranim uređajem.",
+          "recovery_action": "Akcija koja se primjenjuje na upravljački entitet nakon oporavka na mrežu."
         }
       },
       "central_notifications": {
@@ -279,6 +287,12 @@
         "warnings": "Upozorenja",
         "debug": "Debug"
       }
+    },
+    "recovery_action": {
+      "options": {
+        "stay_off": "Ostavi ISKLJUČENO",
+        "turn_on": "Uključi"
+      }
     }
   },
   "entity": {
@@ -297,5 +311,25 @@
         }
       }
     }
+  },
+  "notification_messages": {
+    "automation_alias": "OGP - Obavijesti o zaštiti baterijskog sustava",
+    "automation_description": "Obavještava odabrana odredišta o promjenama mrežnog rada, statusa zaštite, Overridea i sigurnosnim događajima.",
+    "grid_off_title": "⚡ KUĆA – OFF-GRID",
+    "grid_off_message": "Baterijski rad.",
+    "grid_on_title": "🏠 KUĆA – ON-GRID",
+    "grid_on_message": "Mrežni rad.",
+    "override_title": "🔓 OGP – OVERRIDE",
+    "override_message": "Uređaj {{ trigger.event.data.device_name }} je otključan. Trajanje: {{ trigger.event.data.duration_minutes }} min.",
+    "override_expired_title": "🔒 OGP – ZAŠTITA",
+    "override_expired_message": "Override za uređaj {{ trigger.event.data.device_name }} je istekao. Uređaj je ponovno zaključan.",
+    "override_grid_return_title": "🔒 OGP – ZAŠTITA",
+    "override_grid_return_message": "Mreža se vratila. Override za uređaj {{ trigger.event.data.device_name }} je završen.",
+    "locked_title": "🔒 OGP – ZAKLJUČANO",
+    "locked_message": "Uređaj {{ trigger.event.data.device_name }} je zaključan.",
+    "invalid_pin_title": "⚠️ OGP – POGREŠAN PIN",
+    "invalid_pin_message": "Neispravan PIN za Override uređaja {{ trigger.event.data.device_name }}.",
+    "recovery_title": "🔄 OGP – OPORAVAK",
+    "recovery_message": "Oporavak nakon povratka mreže je završen. Zaštita baterije vraćena je u normalan rad."
   }
 }

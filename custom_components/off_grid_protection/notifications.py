@@ -341,6 +341,10 @@ def _build_automation(
                         "condition": "template",
                         "value_template": (
                             "{{ trigger.id == 'grid_status' and "
+                            "trigger.from_state is not none and "
+                            "trigger.to_state is not none and "
+                            "trigger.from_state.state | lower not in "
+                            "['unavailable', 'unknown'] and "
                             "trigger.to_state.state | lower "
                             "| replace('-', '_') | replace(' ', '_') "
                             "in ['off_grid', 'offgrid', 'island', 'islanding'] }}"
@@ -358,6 +362,10 @@ def _build_automation(
                         "condition": "template",
                         "value_template": (
                             "{{ trigger.id == 'grid_status' and "
+                            "trigger.from_state is not none and "
+                            "trigger.to_state is not none and "
+                            "trigger.from_state.state | lower not in "
+                            "['unavailable', 'unknown'] and "
                             "trigger.to_state.state | lower "
                             "| replace('-', '_') | replace(' ', '_') "
                             "in ['on_grid', 'ongrid', 'grid', 'normal', 'connected'] }}"

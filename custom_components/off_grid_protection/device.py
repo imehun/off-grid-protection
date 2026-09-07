@@ -50,6 +50,28 @@ class OffGridDevice:
         )
 
     @property
+    def control_entity_id(self) -> str:
+        """Return the Custom control entity used for CC enable/disable."""
+
+        return str(
+            self.type_config.get(
+                "control_entity_id",
+                "",
+            )
+        )
+
+    @property
+    def recovery_action(self) -> str:
+        """Return the custom-device recovery action."""
+
+        return str(
+            self.type_config.get(
+                "recovery_action",
+                "stay_off",
+            )
+        )
+
+    @property
     def wait_for_unavailable(self) -> bool:
         """Return whether unavailable state should be awaited."""
 

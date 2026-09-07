@@ -22,6 +22,7 @@ from .notifications import (
     async_generate_house_status_automation,
     async_remove_house_status_automation,
     get_notify_options,
+    _load_notification_texts,
 )
 
 
@@ -78,6 +79,23 @@ def _get_automation_options(
     )
 
     return options
+
+async def _async_show_restart_required_notification(
+    hass,
+    language: str | None,
+) -> None:
+    """Show the restart notification in the OGP notification language."""
+    if language not in ("hr", "en"):
+        language = "en"
+
+    texts = await _load_notification_texts(hass, language)
+    persistent_notification.async_create(
+        hass,
+        message=texts["restart_required_message"],
+        title=texts["restart_required_title"],
+        notification_id="off_grid_protection_restart_required",
+    )
+
 
 def _get_configured_main_entity_ids(
     hass,
@@ -293,6 +311,7 @@ class OffGridProtectionConfigFlow(
                 False,
             ):
                 self._central_config = central_config
+                self._central_changed = False
                 return await self.async_step_central_notifications()
 
             return await self._async_create_central_entry(
@@ -735,11 +754,15 @@ class OffGridProtectionConfigFlow(
         self,
         user_input=None,
     ):
-        """Configure a custom device."""
+        """Configure a fully generic Custom device."""
 
         if user_input is not None:
             self._device_config = user_input
-            return await self.async_step_automations()
+            # Custom Climate does not use OGP automation snapshot/disable.
+            # The selected control entity represents the complete external
+            # control integration (for example a CC enable switch).
+            self._device_automations = []
+            return await self.async_step_override()
 
         configured_entities = _get_configured_main_entity_ids(
             self.hass,
@@ -757,16 +780,40 @@ class OffGridProtectionConfigFlow(
                     "entity_id",
                 ): selector.EntitySelector(
                     selector.EntitySelectorConfig(
-                        include_entities=available_entities,
+                        include_entities=available_entities
+                    )
+                ),
+                vol.Required(
+                    "control_entity_id",
+                ): selector.EntitySelector(
+                    selector.EntitySelectorConfig(
+                        include_entities=available_entities
                     )
                 ),
                 vol.Required(
                     "shutdown_action",
-                ): selector.ActionSelector(),
+                    default="turn_off",
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=["turn_off"],
+                        mode=selector.SelectSelectorMode.LIST,
+                        translation_key="shutdown_action",
+                    )
+                ),
                 vol.Required(
                     "off_state",
                     default="off",
                 ): str,
+                vol.Required(
+                    "recovery_action",
+                    default="stay_off",
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=["stay_off", "turn_on"],
+                        mode=selector.SelectSelectorMode.LIST,
+                        translation_key="recovery_action",
+                    )
+                ),
                 vol.Required(
                     "wait_for_unavailable",
                     default=True,
@@ -813,46 +860,19 @@ class OffGridProtectionConfigFlow(
         )
 
         if user_input is not None:
-            show_all = bool(
-                user_input.get(
-                    "show_all_automations",
-                    False,
-                )
-            )
-
-            # The checkbox is intentionally a two-stage control. The first
-            # submit changes the available list to all automations; the next
-            # submit confirms the actual selection.
-            if (
-                show_all
-                and not getattr(
-                    self,
-                    "_automation_options_expanded",
-                    False,
-                )
-            ):
-                self._automation_options_expanded = True
-                self._show_all_automations = True
-                return await self.async_step_automations()
-
             self._device_automations = user_input.get(
                 "automations",
                 [],
             )
             return await self.async_step_override()
 
-        show_all = bool(
-            getattr(
-                self,
-                "_show_all_automations",
-                False,
-            )
-        )
-
+        # Custom devices intentionally see all Home Assistant automations.
+        # The selected custom entity may belong to any HA domain, so the
+        # automation list must not be filtered by that entity.
         options = _get_automation_options(
             self.hass,
             entity_id,
-            show_all=show_all,
+            show_all=True,
         )
 
         schema = vol.Schema(
@@ -867,10 +887,6 @@ class OffGridProtectionConfigFlow(
                         mode=selector.SelectSelectorMode.DROPDOWN,
                     )
                 ),
-                vol.Optional(
-                    "show_all_automations",
-                    default=show_all,
-                ): bool,
             }
         )
 
@@ -1218,9 +1234,12 @@ class OffGridProtectionOptionsFlow(
                     {},
                 )
                 self._central_config = dict(current)
-                current_notifications = current.get(
-                    "notifications",
-                    {},
+                self._central_changed = False
+                current_notifications = dict(
+                    current.get(
+                        "notifications",
+                        {},
+                    )
                 )
                 return await self.async_step_central_notifications(
                     current=current_notifications
@@ -1260,6 +1279,21 @@ class OffGridProtectionOptionsFlow(
         if user_input is not None:
             central_config = dict(user_input)
 
+            # Compare only Central Setup values. Notification settings are
+            # managed separately and must not make this form appear changed.
+            central_changed = any(
+                central_config.get(key) != current.get(key)
+                for key in (
+                    "inverter_off_grid_status",
+                    "power_meter_status",
+                    "recovery_delay",
+                    "central_pin",
+                    "pin_check",
+                    "recovery_enabled",
+                    "logs",
+                )
+            )
+
             # Preserve the existing notification configuration when editing
             # Central Setup. Notification settings are managed exclusively
             # by the House power status notifications step and must not be
@@ -1283,9 +1317,12 @@ class OffGridProtectionOptionsFlow(
                 False,
             ):
                 self._central_config = central_config
-                current_notifications = current.get(
-                    "notifications",
-                    {},
+                self._central_changed = central_changed
+                current_notifications = dict(
+                    current.get(
+                        "notifications",
+                        {},
+                    )
                 )
                 return await self.async_step_central_notifications(
                     current=current_notifications
@@ -1338,6 +1375,12 @@ class OffGridProtectionOptionsFlow(
                 self.config_entry,
                 data=new_data,
             )
+
+            if central_changed:
+                await _async_show_restart_required_notification(
+                    self.hass,
+                    existing_notifications.get("language", "en"),
+                )
 
             return self.async_create_entry(
                 title="",
@@ -1441,6 +1484,20 @@ class OffGridProtectionOptionsFlow(
         current = current or {}
 
         if user_input is not None:
+            # The config entry is the authoritative source for the
+            # previously saved notification settings. ``current`` is only
+            # used for form defaults and is not preserved by HA across the
+            # form submit callback.
+            old_notifications = dict(
+                self.config_entry.data.get(
+                    "central",
+                    {},
+                ).get(
+                    "notifications",
+                    {},
+                )
+            )
+
             notification_types = []
             if user_input.get("send_notification", False):
                 notification_types.append("notify")
@@ -1464,6 +1521,49 @@ class OffGridProtectionOptionsFlow(
                 current.get("language", "en"),
             )
 
+            new_notification_config = {
+                "enabled": bool(notification_types),
+                "notification_types": notification_types,
+                "notification_events": notification_events,
+                "notify_targets": notify_targets,
+                "browser_mod_targets": browser_mod_targets,
+                "language": language,
+            }
+
+            def _normalize_notification_value(
+                key,
+                value,
+            ):
+                if key in (
+                    "notification_types",
+                    "notification_events",
+                    "notify_targets",
+                    "browser_mod_targets",
+                ):
+                    return sorted(str(item) for item in (value or []))
+                if key == "enabled":
+                    return bool(value)
+                return value
+
+            notification_changed = any(
+                _normalize_notification_value(
+                    key,
+                    new_notification_config.get(key),
+                )
+                != _normalize_notification_value(
+                    key,
+                    old_notifications.get(key),
+                )
+                for key in (
+                    "enabled",
+                    "notification_types",
+                    "notification_events",
+                    "notify_targets",
+                    "browser_mod_targets",
+                    "language",
+                )
+            )
+
             # Settings replace the single OGP notification automation.
             # Also discover orphaned OGP automations created by earlier
             # test versions so they cannot continue sending notifications.
@@ -1480,7 +1580,11 @@ class OffGridProtectionOptionsFlow(
                     )
 
                 central_config = dict(
-                    self.config_entry.data.get("central", {})
+                    getattr(
+                        self,
+                        "_central_config",
+                        self.config_entry.data.get("central", {}),
+                    )
                 )
                 central_config.pop("notifications", None)
                 central_config["generated_resources"] = {
@@ -1498,6 +1602,15 @@ class OffGridProtectionOptionsFlow(
                 # configured OGP device so all device entries immediately
                 # use the current central configuration.
                 await self._async_reload_ogp_device_entries()
+
+                if (
+                    getattr(self, "_central_changed", False)
+                    or notification_changed
+                ):
+                    await _async_show_restart_required_notification(
+                        self.hass,
+                        language,
+                    )
 
                 return self.async_create_entry(
                     title="",
@@ -1536,7 +1649,11 @@ class OffGridProtectionOptionsFlow(
                     )
 
             central_config = dict(
-                self.config_entry.data.get("central", {})
+                getattr(
+                    self,
+                    "_central_config",
+                    self.config_entry.data.get("central", {}),
+                )
             )
             central_config["notifications"] = {
                 "enabled": True,
@@ -1575,6 +1692,15 @@ class OffGridProtectionOptionsFlow(
             # configured OGP device so all device entries immediately
             # use the current central configuration.
             await self._async_reload_ogp_device_entries()
+
+            if (
+                getattr(self, "_central_changed", False)
+                or notification_changed
+            ):
+                await _async_show_restart_required_notification(
+                    self.hass,
+                    language,
+                )
 
             return self.async_create_entry(
                 title="",
@@ -1782,9 +1908,17 @@ class OffGridProtectionOptionsFlow(
             updated_type_config["entity_id"] = (
                 user_input["entity_id"]
             )
+            if device_type == "custom":
+                updated_type_config["control_entity_id"] = (
+                    user_input["control_entity_id"]
+                )
             updated_type_config["off_state"] = (
                 user_input["off_state"]
             )
+            if device_type == "custom":
+                updated_type_config["recovery_action"] = (
+                    user_input.get("recovery_action", "stay_off")
+                )
             updated_type_config[
                 "wait_for_unavailable"
             ] = user_input["wait_for_unavailable"]
@@ -1798,9 +1932,9 @@ class OffGridProtectionOptionsFlow(
             updated_device["type_config"] = (
                 updated_type_config
             )
-            updated_device["automations"] = user_input.get(
-                "automations",
-                [],
+            updated_device["automations"] = (
+                [] if device_type == "custom"
+                else user_input.get("automations", [])
             )
 
             updated_device["override"] = {
@@ -1879,8 +2013,7 @@ class OffGridProtectionOptionsFlow(
             selected=selected_automations,
         )
 
-        schema = vol.Schema(
-            {
+        schema_fields = {
                 vol.Required(
                     "name",
                     default=device.get(
@@ -1897,9 +2030,10 @@ class OffGridProtectionOptionsFlow(
                 ): selector.EntitySelector(
                     selector.EntitySelectorConfig(
                         domain=(
-                            device_type
-                            if device_type
-                            in [
+                            "climate"
+                            if device_type == "custom"
+                            else device_type
+                            if device_type in [
                                 "climate",
                                 "switch",
                             ]
@@ -1954,22 +2088,6 @@ class OffGridProtectionOptionsFlow(
                     )
                 ),
 
-                vol.Optional(
-                    "automations",
-                    default=selected_automations,
-                ): selector.SelectSelector(
-                    selector.SelectSelectorConfig(
-                        options=automation_options,
-                        multiple=True,
-                        mode=selector.SelectSelectorMode.DROPDOWN,
-                    )
-                ),
-
-                vol.Optional(
-                    "show_all_automations",
-                    default=show_all,
-                ): bool,
-
                 vol.Required(
                     "override_enabled",
                     default=override.get(
@@ -2018,7 +2136,50 @@ class OffGridProtectionOptionsFlow(
                     )
                 ),
             }
-        )
+
+        if device_type == "custom":
+            schema_fields[
+                vol.Required(
+                    "recovery_action",
+                    default=type_config.get(
+                        "recovery_action",
+                        "stay_off",
+                    ),
+                )
+            ] = selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=["stay_off", "turn_on"],
+                    mode=selector.SelectSelectorMode.LIST,
+                    translation_key="recovery_action",
+                )
+            )
+
+        if device_type == "custom":
+            schema_fields[
+                vol.Required(
+                    "control_entity_id",
+                    default=type_config.get(
+                        "control_entity_id",
+                        "",
+                    ),
+                )
+            ] = selector.EntitySelector()
+
+        else:
+            schema_fields[
+                vol.Optional(
+                    "automations",
+                    default=selected_automations,
+                )
+            ] = selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=automation_options,
+                    multiple=True,
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            )
+
+        schema = vol.Schema(schema_fields)
 
         return self.async_show_form(
             step_id="device_settings",

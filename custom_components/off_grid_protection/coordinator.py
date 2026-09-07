@@ -60,6 +60,16 @@ class OffGridCoordinator:
         """Initialize the coordinator."""
 
         self.hass = hass
+        self._central_entry_id = next(
+            (
+                entry.entry_id
+                for entry in hass.config_entries.async_entries(
+                    "off_grid_protection"
+                )
+                if entry.data.get("type") == "central"
+            ),
+            None,
+        )
         self.central = central
         self._logs_level = normalize_log_level(logs_level)
 
@@ -69,6 +79,10 @@ class OffGridCoordinator:
         self._unsubscribers = []
         self._sync_unsubscriber = None
         self._recovery_task: asyncio.Task | None = None
+
+        # Startup baseline: the initial inverter state is established
+        # during initialization and must not be treated as a grid transition.
+        self._startup_baseline_initialized = False
 
         # Runtime listeners used by OGP entities.
         self._listeners: set[Callable[[], None]] = set()
@@ -149,10 +163,36 @@ class OffGridCoordinator:
                     err,
                 )
 
+    def _active_devices(self) -> list[OffGridDevice]:
+        """Return only OGP Device Entries that are enabled.
+
+        A disabled Device Entry is deliberately excluded from OGP runtime
+        control while other enabled Device Entries continue to operate.
+        Legacy devices stored directly in the Central Entry remain active.
+        """
+
+        active_devices: list[OffGridDevice] = []
+        device_entries = {
+            entry.data.get("device", {}).get("id"): entry
+            for entry in self.hass.config_entries.async_entries(
+                "off_grid_protection"
+            )
+            if entry.data.get("type") == "device"
+            and entry.data.get("central_entry_id") == self._central_entry_id
+        }
+
+        for device in self.central.devices:
+            entry = device_entries.get(device.id)
+            if entry is not None and entry.disabled_by is not None:
+                continue
+            active_devices.append(device)
+
+        return active_devices
+
     def _initialize_devices(self) -> None:
         """Initialize runtime state for configured devices."""
 
-        for device in self.central.devices:
+        for device in self._active_devices():
             runtime = self.runtime.add_device(
                 device.id
             )
@@ -173,9 +213,14 @@ class OffGridCoordinator:
             state.state if state is not None else None
         )
 
-        self._log(logging.DEBUG, 
+        # The state read during coordinator initialization is the startup
+        # baseline. It must never generate an ON-GRID/OFF-GRID transition.
+        self._startup_baseline_initialized = True
+
+        self._log(logging.DEBUG,
             "OFF-GRID: inverter=%s -> "
-            "HA state=%s, grid_status=%s",
+            "HA state=%s, grid_status=%s, "
+            "startup baseline initialized",
             self.central.inverter_off_grid_status,
             state.state if state is not None else None,
             self.runtime.grid_status,
@@ -265,7 +310,7 @@ class OffGridCoordinator:
     def _refresh_all_device_states(self) -> None:
         """Refresh all protected devices."""
 
-        for device in self.central.devices:
+        for device in self._active_devices():
             runtime = self.runtime.get_device(
                 device.id
             )
@@ -328,8 +373,23 @@ class OffGridCoordinator:
     ) -> bool:
         """Determine whether a device requires shutdown."""
 
+        if device not in self._active_devices():
+            return False
+
         if runtime.override_active:
             return False
+
+        if device.device_type == "custom":
+            control_entity_id = device.control_entity_id
+            if control_entity_id:
+                control_state = self.hass.states.get(
+                    control_entity_id
+                )
+                if (
+                    control_state is not None
+                    and control_state.state == "on"
+                ):
+                    return True
 
         if not runtime.available:
             return False
@@ -392,7 +452,38 @@ class OffGridCoordinator:
         device: OffGridDevice,
         runtime: DeviceRuntime,
     ) -> None:
-        """Capture automation states before protection."""
+        """Capture automation or Custom control state before protection."""
+
+        if device.device_type == "custom":
+            control_entity_id = device.control_entity_id
+            if not control_entity_id:
+                self._log(
+                    logging.ERROR,
+                    "OFF-GRID CUSTOM SNAPSHOT: %s -> control entity not configured",
+                    device.name,
+                )
+                return
+
+            state = self.hass.states.get(control_entity_id)
+            if state is None:
+                self._log(
+                    logging.ERROR,
+                    "OFF-GRID CUSTOM SNAPSHOT: %s -> %s not found",
+                    device.name,
+                    control_entity_id,
+                )
+                return
+
+            if runtime.custom_control_state is None:
+                runtime.custom_control_state = state.state
+                self._log(
+                    logging.WARNING,
+                    "OFF-GRID CUSTOM SNAPSHOT: %s -> %s = %s",
+                    device.name,
+                    control_entity_id,
+                    state.state,
+                )
+            return
 
         if runtime.automation_states:
             self._log(logging.DEBUG, 
@@ -594,12 +685,82 @@ class OffGridCoordinator:
                     err,
                 )
 
+    async def _shutdown_control_entity(
+        self,
+        device: OffGridDevice,
+        runtime: DeviceRuntime,
+    ) -> None:
+        """Turn OFF a Custom control entity and verify the result."""
+
+        entity_id = device.control_entity_id
+        if "." not in entity_id:
+            runtime.shutdown_failed = True
+            self._notify_listeners()
+            self._log(
+                logging.ERROR,
+                "OFF-GRID CUSTOM: control entity invalid: %s -> %s",
+                device.name,
+                entity_id,
+            )
+            return
+
+        domain = entity_id.split(".", 1)[0]
+
+        try:
+            await self.hass.services.async_call(
+                domain,
+                "turn_off",
+                {"entity_id": entity_id},
+                blocking=True,
+            )
+        except Exception as err:
+            runtime.shutdown_failed = True
+            self._notify_listeners()
+            self._log(
+                logging.ERROR,
+                "OFF-GRID CUSTOM: control shutdown failed: %s -> %s -> %s",
+                device.name,
+                entity_id,
+                err,
+            )
+            return
+
+        deadline = self.hass.loop.time() + device.command_timeout
+        while self.hass.loop.time() < deadline:
+            state = self.hass.states.get(entity_id)
+            if state is not None and state.state == "off":
+                self._log(
+                    logging.WARNING,
+                    "OFF-GRID CUSTOM: control OFF confirmed: %s -> %s",
+                    device.name,
+                    entity_id,
+                )
+                return
+            await asyncio.sleep(0.5)
+
+        runtime.shutdown_failed = True
+        self._notify_listeners()
+        self._log(
+            logging.ERROR,
+            "OFF-GRID CUSTOM: control shutdown timeout: %s -> %s",
+            device.name,
+            entity_id,
+        )
+
     async def _shutdown_device(
         self,
         device: OffGridDevice,
         runtime: DeviceRuntime,
     ) -> None:
         """Send shutdown command and verify the result."""
+
+        if device not in self._active_devices():
+            self._log(
+                logging.DEBUG,
+                "OFF-GRID PROTECTION: shutdown skipped for disabled device: %s",
+                device.name,
+            )
+            return
 
         runtime.shutdown_requested = True
         runtime.shutdown_confirmed = False
@@ -663,6 +824,33 @@ class OffGridCoordinator:
                 },
                 blocking=True,
             )
+
+            if device.device_type == "custom":
+                control_entity_id = device.control_entity_id
+                if not control_entity_id or "." not in control_entity_id:
+                    runtime.shutdown_failed = True
+                    self._log(
+                        logging.ERROR,
+                        "OFF-GRID CUSTOM: control entity missing/invalid: %s -> %s",
+                        device.name,
+                        control_entity_id,
+                    )
+                    return
+
+                control_domain = control_entity_id.split(".", 1)[0]
+                await self.hass.services.async_call(
+                    control_domain,
+                    "turn_off",
+                    {"entity_id": control_entity_id},
+                    blocking=True,
+                )
+
+                self._log(
+                    logging.WARNING,
+                    "OFF-GRID CUSTOM: CONTROL ENTITY OFF: %s -> %s",
+                    device.name,
+                    control_entity_id,
+                )
 
         except Exception as err:
             runtime.shutdown_failed = True
@@ -773,7 +961,7 @@ class OffGridCoordinator:
         # Capture automation state for ALL devices first.
         # ---------------------------------------------------------
 
-        for device in self.central.devices:
+        for device in self._active_devices():
             runtime = self.runtime.get_device(
                 device.id
             )
@@ -793,7 +981,7 @@ class OffGridCoordinator:
         # Disable automations for ALL devices.
         # ---------------------------------------------------------
 
-        for device in self.central.devices:
+        for device in self._active_devices():
             runtime = self.runtime.get_device(
                 device.id
             )
@@ -815,7 +1003,7 @@ class OffGridCoordinator:
             tuple[OffGridDevice, DeviceRuntime]
         ] = []
 
-        for device in self.central.devices:
+        for device in self._active_devices():
             runtime = self.runtime.get_device(
                 device.id
             )
@@ -949,7 +1137,7 @@ class OffGridCoordinator:
 
         # The protection cycle locks every protected device.
         # Override is the controlled exception for a device.
-        for device in self.central.devices:
+        for device in self._active_devices():
             runtime = self.runtime.get_device(
                 device.id
             )
@@ -991,6 +1179,14 @@ class OffGridCoordinator:
                 "OFF-GRID OVERRIDE: "
                 "device not found: %s",
                 device_id,
+            )
+            return False
+
+        if device not in self._active_devices():
+            self._log(
+                logging.DEBUG,
+                "OFF-GRID OVERRIDE: skipped for disabled device: %s",
+                device.name,
             )
             return False
 
@@ -1289,6 +1485,9 @@ class OffGridCoordinator:
     ) -> None:
         """Reassert shutdown if a device turns on while off-grid."""
 
+        if device not in self._active_devices():
+            return
+
         if self.runtime.grid_status != GridStatus.OFF_GRID:
             return
 
@@ -1386,6 +1585,57 @@ class OffGridCoordinator:
 
         await self._run_protection_cycle()
 
+    async def _recover_custom_device(
+        self,
+        device: OffGridDevice,
+        runtime: DeviceRuntime,
+    ) -> None:
+        """Apply the configured recovery action for a Custom device."""
+
+        if device.device_type != "custom":
+            return
+
+        if device.recovery_action != "turn_on":
+            self._log(
+                logging.DEBUG,
+                "OFF-GRID RECOVERY: CUSTOM DEVICE LEFT OFF: %s",
+                device.name,
+            )
+            return
+
+        entity_id = device.control_entity_id
+        if "." not in entity_id:
+            self._log(
+                logging.ERROR,
+                "OFF-GRID RECOVERY: CUSTOM TURN-ON FAILED: invalid control_entity_id=%s",
+                entity_id,
+            )
+            return
+
+        domain = entity_id.split(".", 1)[0]
+
+        try:
+            await self.hass.services.async_call(
+                domain,
+                "turn_on",
+                {"entity_id": entity_id},
+                blocking=True,
+            )
+            self._log(
+                logging.WARNING,
+                "OFF-GRID RECOVERY: CUSTOM CONTROL TURN-ON SENT: %s -> %s",
+                device.name,
+                entity_id,
+            )
+        except Exception as err:
+            self._log(
+                logging.ERROR,
+                "OFF-GRID RECOVERY: CUSTOM TURN-ON FAILED: %s -> %s -> %s",
+                device.name,
+                entity_id,
+                err,
+            )
+
     async def _run_recovery(self) -> None:
         """Run the recovery sequence."""
 
@@ -1479,11 +1729,11 @@ class OffGridCoordinator:
             "configured devices=%s",
             [
                 device.name
-                for device in self.central.devices
+                for device in self._active_devices()
             ],
         )
 
-        for device in self.central.devices:
+        for device in self._active_devices():
             runtime = self.runtime.get_device(
                 device.id
             )
@@ -1521,6 +1771,15 @@ class OffGridCoordinator:
                 runtime,
             )
 
+            if (
+                device.device_type == "custom"
+                and device.recovery_action == "turn_on"
+            ):
+                await self._recover_custom_device(
+                    device,
+                    runtime,
+                )
+
             runtime.recovery_completed = True
 
             self._log(
@@ -1537,6 +1796,7 @@ class OffGridCoordinator:
 
         for device in self.runtime.devices.values():
             device.automation_states.clear()
+            device.custom_control_state = None
 
         self.runtime.protection_active = False
         self.runtime.protection_cycle_complete = False
@@ -1591,7 +1851,39 @@ class OffGridCoordinator:
             entity_id
         )
 
+        # Custom control entities are also protected while OFF-GRID.
+        # They represent the complete external control integration
+        # (for example a CC enable switch), so turning one ON must not
+        # bypass OGP protection.
         if device is None:
+            control_device = self._find_custom_by_control_entity(
+                entity_id
+            )
+            if control_device is None:
+                return
+
+            new_state = event.data.get("new_state")
+            if (
+                self.runtime.grid_status == GridStatus.OFF_GRID
+                and self.runtime.protection_active
+                and new_state is not None
+                and new_state.state == "on"
+            ):
+                runtime = self.runtime.get_device(
+                    control_device.id
+                )
+                if runtime is not None and not runtime.override_active:
+                    self._log(
+                        logging.WARNING,
+                        "OFF-GRID PROTECTION: "
+                        "CUSTOM CONTROL TURNED ON: %s -> %s -> reasserting OFF",
+                        control_device.name,
+                        entity_id,
+                    )
+                    await self._shutdown_control_entity(
+                        control_device,
+                        runtime,
+                    )
             return
 
         runtime = self.runtime.get_device(
@@ -1719,11 +2011,30 @@ class OffGridCoordinator:
             ha_state
         )
 
+        # The coordinator establishes the initial grid state before
+        # listeners are active. If a state event arrives during startup,
+        # synchronize the baseline but do not treat it as a transition.
+        if not self._startup_baseline_initialized:
+            self.runtime.grid_status = new_status
+            self._startup_baseline_initialized = True
+
+            self._notify_listeners()
+
+            self._log(
+                logging.DEBUG,
+                "OFF-GRID GRID EVENT: "
+                "startup baseline initialized: "
+                "HA state=%s, grid_status=%s",
+                ha_state,
+                new_status,
+            )
+            return
+
         self.runtime.grid_status = new_status
 
         self._notify_listeners()
 
-        self._log(logging.WARNING, 
+        self._log(logging.WARNING,
             "OFF-GRID GRID EVENT: "
             "HA state=%s, grid_status=%s, previous=%s",
             ha_state,
@@ -1769,7 +2080,7 @@ class OffGridCoordinator:
             now.strftime("%H:%M:%S"),
         )
 
-        for device in self.central.devices:
+        for device in self._active_devices():
             runtime = self.runtime.get_device(
                 device.id
             )
@@ -1803,14 +2114,18 @@ class OffGridCoordinator:
         # ---------------------------------------------------------
         # Safety re-check.
         #
-        # Override is the explicit exception.
+        # Override is the explicit exception. Do NOT use
+        # shutdown_requested as a suppression flag here. A device can
+        # turn ON again after the initial shutdown, and the periodic
+        # safety path must be able to reassert OFF even when the first
+        # shutdown request is still marked as requested.
         # ---------------------------------------------------------
 
         if (
             self.runtime.grid_status == GridStatus.OFF_GRID
             and self.runtime.protection_active
         ):
-            for device in self.central.devices:
+            for device in self._active_devices():
                 runtime = self.runtime.get_device(
                     device.id
                 )
@@ -1831,8 +2146,12 @@ class OffGridCoordinator:
                 ):
                     continue
 
-                if runtime.shutdown_requested:
-                    continue
+                self._log(
+                    logging.WARNING,
+                    "OFF-GRID PROTECTION: "
+                    "SAFETY RECHECK - DEVICE ON: %s -> reasserting shutdown",
+                    device.name,
+                )
 
                 asyncio.create_task(
                     self._reassert_device_shutdown(
@@ -1845,33 +2164,63 @@ class OffGridCoordinator:
         self,
         entity_id: str,
     ) -> OffGridDevice | None:
-        """Find a configured device by entity ID."""
+        """Find a configured device by its controlled entity ID."""
 
-        for device in self.central.devices:
+        for device in self._active_devices():
             if device.entity_id == entity_id:
                 return device
 
         return None
 
+    def _find_custom_by_control_entity(
+        self,
+        entity_id: str,
+    ) -> OffGridDevice | None:
+        """Find a Custom device by its control entity ID."""
+
+        for device in self._active_devices():
+            if (
+                device.device_type == "custom"
+                and device.control_entity_id == entity_id
+            ):
+                return device
+
+        return None
+
     def _subscribe_to_devices(self) -> None:
-        """Subscribe to state changes of all configured devices."""
+        """Subscribe to controlled and Custom control entity state changes."""
 
-        for device in self.central.devices:
-            unsubscribe = async_track_state_change_event(
-                self.hass,
-                [device.entity_id],
-                self._async_state_changed,
-            )
+        subscribed: set[str] = set()
 
-            self._unsubscribers.append(
-                unsubscribe
-            )
+        for device in self._active_devices():
+            entity_ids = [device.entity_id]
 
-            self._log(logging.DEBUG, 
-                "OFF-GRID: subscribed to %s (%s)",
-                device.name,
-                device.entity_id,
-            )
+            if (
+                device.device_type == "custom"
+                and device.control_entity_id
+            ):
+                entity_ids.append(device.control_entity_id)
+
+            for entity_id in entity_ids:
+                if not entity_id or entity_id in subscribed:
+                    continue
+
+                unsubscribe = async_track_state_change_event(
+                    self.hass,
+                    [entity_id],
+                    self._async_state_changed,
+                )
+
+                self._unsubscribers.append(
+                    unsubscribe
+                )
+                subscribed.add(entity_id)
+
+                self._log(logging.DEBUG,
+                    "OFF-GRID: subscribed to %s (%s)",
+                    device.name,
+                    entity_id,
+                )
 
     def _subscribe_to_grid_status(self) -> None:
         """Subscribe to inverter grid status changes."""
@@ -1932,14 +2281,14 @@ class OffGridCoordinator:
     def devices(self):
         """Return all configured devices."""
 
-        return self.central.devices
+        return self._active_devices()
 
     @property
     def device_count(self) -> int:
         """Return the number of configured devices."""
 
         return len(
-            self.central.devices
+            self._active_devices()
         )
 
     def get_device_runtime(

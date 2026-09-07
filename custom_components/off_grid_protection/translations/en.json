@@ -64,14 +64,20 @@
       },
       "custom": {
         "title": "Custom device configuration",
-        "description": "Configure the shutdown and recovery behavior for this custom device.",
+        "description": "Configure a generic device entity and a control entity for this Custom device.",
         "data": {
-          "entity_id": "Entity",
+          "entity_id": "Device entity",
           "shutdown_action": "Shutdown action",
           "off_state": "OFF state",
           "wait_for_unavailable": "Wait if unavailable",
           "recovery_timeout": "Recovery timeout",
-          "command_timeout": "Command timeout"
+          "command_timeout": "Command timeout",
+          "recovery_action": "Recovery action",
+          "control_entity_id": "Control entity"
+        },
+        "data_description": {
+          "recovery_action": "Action to apply to the Control entity after ON-GRID recovery.",
+          "control_entity_id": "Entity used by OGP to disable the Custom device control and optionally re-enable it during recovery."
         }
       },
       "automations": {
@@ -186,11 +192,13 @@
           "require_pin": "Require PIN",
           "minimum_runtime": "Minimum runtime",
           "maximum_runtime": "Maximum runtime",
-          "show_all_automations": "Show all automations"
+          "show_all_automations": "Show all automations",
+          "recovery_action": "Recovery action"
         },
         "data_description": {
           "automations": "Automations associated with the selected device.",
-          "show_all_automations": "Show all Home Assistant automations instead of only associated automations."
+          "show_all_automations": "Show all Home Assistant automations instead of only associated automations.",
+          "recovery_action": "Action to apply to the Control entity after ON-GRID recovery."
         }
       },
       "central_notifications": {
@@ -279,6 +287,12 @@
         "warnings": "Warnings",
         "debug": "Debug"
       }
+    },
+    "recovery_action": {
+      "options": {
+        "stay_off": "Stay OFF",
+        "turn_on": "Turn ON"
+      }
     }
   },
   "entity": {
@@ -297,5 +311,25 @@
         }
       }
     }
+  },
+  "notification_messages": {
+    "automation_alias": "OGP - Battery Protection Notifications",
+    "automation_description": "Notifies selected targets about grid operation, protection status, Override and security events.",
+    "grid_off_title": "⚡ HOUSE – OFF-GRID",
+    "grid_off_message": "Battery operation.",
+    "grid_on_title": "🏠 HOUSE – ON-GRID",
+    "grid_on_message": "Grid operation.",
+    "override_title": "🔓 OGP – OVERRIDE",
+    "override_message": "Device {{ trigger.event.data.device_name }} is unlocked. Duration: {{ trigger.event.data.duration_minutes }} min.",
+    "override_expired_title": "🔒 OGP – PROTECTION",
+    "override_expired_message": "Override for device {{ trigger.event.data.device_name }} expired. The device is locked again.",
+    "override_grid_return_title": "🔒 OGP – PROTECTION",
+    "override_grid_return_message": "Grid returned. Override for device {{ trigger.event.data.device_name }} ended.",
+    "locked_title": "🔒 OGP – LOCKED",
+    "locked_message": "Device {{ trigger.event.data.device_name }} is locked.",
+    "invalid_pin_title": "⚠️ OGP – INVALID PIN",
+    "invalid_pin_message": "Invalid Override PIN for device {{ trigger.event.data.device_name }}.",
+    "recovery_title": "🔄 OGP – RECOVERY",
+    "recovery_message": "Grid recovery completed. Battery protection is restored to normal operation."
   }
 }

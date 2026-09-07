@@ -1,36 +1,41 @@
-# OGP -- Upute za konfiguraciju
+# OGP --- Upute za konfiguraciju
 
-Detaljne upute za konfiguraciju OGP-a v1.1.3.
+Detaljne upute za konfiguraciju OGP-a v1.1.4.
 
 ## 1. Zahtjevi i opcionalne komponente
 
-Za osnovnu konfiguraciju i zaštitnu funkcionalnost OGP-a nisu potrebni Huawei Solar, Browser Mod, Button-card niti Stack-in-card.
+Za osnovnu konfiguraciju i zaštitnu funkcionalnost OGP-a nisu potrebni
+Huawei Solar, Browser Mod, Button-card niti Stack-in-card.
 
 Opcionalne komponente:
 
-- **Browser Mod** -- samo za Browser Mod popup obavijesti.
-- **Button-card** -- preporučuje se za generirano Override dashboard sučelje.
-- **Stack-in-card** -- preporučuje se za generirano Override dashboard sučelje.
+-   **Browser Mod** --- samo za Browser Mod popup obavijesti.
+-   **Button-card** --- preporučuje se za generirano Override dashboard
+    sučelje.
+-   **Stack-in-card** --- preporučuje se za generirano Override
+    dashboard sučelje.
 
-Home Assistant obavijesti ne zahtijevaju Browser Mod i mogu koristiti dostupna odredišta, uključujući Home Assistant Notification panel.
+Home Assistant obavijesti ne zahtijevaju Browser Mod.
 
-Generirani Lovelace YAML je pomoćni predložak. Nije dependency OGP-a i korisnik ga može slobodno mijenjati.
+Generirani Lovelace YAML je pomoćni predložak. Nije dependency OGP-a i
+korisnik ga može slobodno mijenjati.
 
 ## 2. Model zaštite
 
-OGP štiti **baterijski sustav, a ne pojedine uređaje**.
+OGP štiti **baterijski sustav**, a ne korisničke Home Assistant ovlasti.
 
-Odabrani uređaji su postojeća Home Assistant trošila. OGP ih nadzire i tijekom OFF-GRID rada može ih isključiti.
+Svaki OGP Device Entry je neovisan.
 
-Odabrane korisničke automatizacije dio su strategije zaštite. OGP pamti njihovo stanje prije zaštite, isključuje odabrane automatizacije koje su bile uključene i nakon recoveryja vraća njihovo prethodno stanje.
+Ako je Device Entry disabled, OGP njime ne upravlja. Ostali enabled
+Device Entryji nastavljaju normalno raditi.
 
-Ako se odabrano trošilo ipak uključi tijekom OFF-GRID rada bez aktivnog Overridea, OGP ga ponovno isključuje.
+Kod standardnih uređaja odabrane korisničke automatizacije dio su
+strategije zaštite. OGP sprema njihovo stanje prije zaštite, isključuje
+odabrane automatizacije koje su bile uključene i nakon recoveryja vraća
+njihovo prethodno stanje.
 
-### Race condition -- utrka
-
-Ako korisnička automatizacija nije odabrana, može pokušati uključiti trošilo dok ga OGP pokušava isključiti. To je moguća **race condition (utrka)**.
-
-Odaberite korisničke automatizacije koje tijekom OFF-GRID rada mogu pokrenuti relevantna trošila.
+Ako se zaštićeno trošilo tijekom OFF-GRID rada uključi bez aktivnog
+Overridea, OGP ponovno izvršava konfiguriranu radnju gašenja.
 
 ## 3. Centralna konfiguracija
 
@@ -40,276 +45,312 @@ Odaberite entity koji prikazuje režim rada invertera/glavnog uređaja.
 
 Prepoznata OFF-GRID stanja:
 
-- `off_grid`
-- `offgrid`
-- `island`
-- `islanding`
+-   `off_grid`
+-   `offgrid`
+-   `island`
+-   `islanding`
 
 Prepoznata ON-GRID stanja:
 
-- `on_grid`
-- `ongrid`
-- `grid`
-- `normal`
-- `connected`
+-   `on_grid`
+-   `ongrid`
+-   `grid`
+-   `normal`
+-   `connected`
 
 Ostala ili nedostupna stanja tretiraju se kao `UNKNOWN`.
 
 ### 3.2 Power Meter Status
 
-Odaberite entity statusa power metera koji se koristi kao dodatna potvrda.
+Odaberite entity statusa power metera koji se koristi kao dodatna
+potvrda.
 
-Ako Power Meter Status postane `unknown` ili `unavailable`, OGP to tretira kao potvrdu da je inverter/glavni uređaj OFF-GRID. To je namjerno jer tijekom prijelaza u OFF-GRID power meter može izgubiti komunikaciju ili napajanje.
+Ako Power Meter Status postane `unknown` ili `unavailable`, OGP to
+tretira kao potvrdu da je inverter/glavni uređaj OFF-GRID. To je
+namjerno jer tijekom prijelaza u OFF-GRID power meter može izgubiti
+komunikaciju ili napajanje.
 
 ### 3.3 Recovery delay
 
-Postavite centralnu odgodu koja se koristi nakon povratka na ON-GRID kako bi se sustav stabilizirao prije recoveryja.
+Postavite centralnu odgodu koja se koristi nakon povratka na ON-GRID
+kako bi se sustav stabilizirao prije recoveryja.
 
-Ovo se razlikuje od Recovery timeouta pojedinog uređaja.
+To se razlikuje od Recovery timeouta pojedinog uređaja.
 
 ### 3.4 Logovi
 
-Centralna konfiguracija omogućuje tri razine OGP logiranja:
+Centralno OGP logiranje može biti:
 
-- **Isključeno** -- OGP ne šalje operativne logove.
-- **Upozorenja** -- bilježe se važni događaji i greške.
-- **Debug** -- uz upozorenja i greške bilježe se i detaljne dijagnostičke poruke.
+-   Isključeno
+-   Upozorenja
+-   Debug
 
-**Debug** koristite tijekom početne konfiguracije, testiranja i dijagnostike. Nakon uspješnog testiranja preporučuje se **Isključeno** ili **Upozorenja**.
-
-OGP postavka je glavni prekidač za OGP operativno logiranje. Postavljanje Home Assistant loggera na DEBUG ne uključuje OGP poruke ako je OGP Logiranje isključeno.
+Debug je namijenjen konfiguraciji, testiranju i dijagnostici.
 
 ### 3.5 Obavijesti
 
 Obavijesti su opcionalne.
 
-Centralna konfiguracija obavijesti otvara se kao **Obavijesti o stanju napajanja**.
+Mogu se konfigurirati:
 
-Omogućene su opcije:
+-   uključivanje/isključivanje obavijesti;
+-   Home Assistant notification odredišta;
+-   Browser Mod popup odredišta;
+-   kategorije obavijesti;
+-   jezik obavijesti.
 
-- **Pošalji obavijest**;
-- **Primatelji obavijesti**;
-- **Prikaži Browser Mod popup**;
-- **Browser Mod uređaji**;
-- kategorije obavijesti za status mreže, zaštitu/Override i sigurnost;
-- hrvatski ili engleski jezik obavijesti.
+Postavke obavijesti spremaju se odvojeno i ostaju sačuvane kroz promjene
+centralne konfiguracije i restart Home Assistanta.
 
-Konfiguracija obavijesti sprema se odvojeno od Centralne konfiguracije i ostaje sačuvana kada se promijeni Centralna konfiguracija ili restartira Home Assistant.
+Ako se promijene OGP postavke, OGP može prikazati trajnu Home Assistant
+obavijest koja preporučuje restart Home Assistanta. OGP ne radi restart
+automatski.
 
-U v1.1.3 odabrane kategorije obavijesti primjenjuju se globalno na konfigurirana notification i Browser Mod odredišta. Pojedinačno usmjeravanje različitih kategorija na različite uređaje nije dio ove verzije.
-
-### 3.6 Browser Mod popup
-
-Browser Mod popup je opcionalan.
-
-Uključite ga samo ako je Browser Mod instaliran i želite popup prikaz.
-
-Normalne Home Assistant obavijesti ne zahtijevaju Browser Mod.
+Početni prijelaz `unavailable`/`unknown` → valjano stanje mreže nakon
+pokretanja Home Assistanta potiskuje se kako se ne bi javila lažna
+obavijest o promjeni mrežnog stanja.
 
 ## 4. Konfiguracija Device Entryja
 
-Odabrano trošilo konfigurira se kao zaseban OGP Device Entry. Svaki Device Entry sadrži glavni Home Assistant entity koji OGP treba nadzirati i kontrolirati tijekom zaštite baterijskog sustava.
+Svako zaštićeno trošilo konfigurira se kao zaseban OGP Device Entry.
 
-### 4.1 Glavni entity
+### 4.1 Enabled / Disabled
 
-Odaberite postojeći glavni Home Assistant entity. Entity koji je već konfiguriran kao glavni entity drugog OGP Device Entryja više se ne nudi za odabir.
+Pojedini Device Entry može se onemogučiti bez onemogučavanja centralnog OGP
+entryja.
 
-### 4.2 OFF stanje
+Kada je Device Entry disabled, OGP:
 
-Konfigurirajte stanje koje predstavlja da je trošilo OFF.
+-   ne upravlja uređajem;
+-   ne gasi uređaj;
+-   ne izvršava safety reassertion;
+-   ne izvršava Override/recovery radnje nad njim;
+-   ne uključuje uređaj u aktivni protection ciklus.
 
-### 4.3 Korisničke automatizacije
+Uređaj i dalje ostaje dostupan Home Assistantu i drugim integracijama.
 
-Odaberite postojeće korisničke automatizacije koje mogu pokrenuti ovo trošilo tijekom OFF-GRID rada.
+Ovo je posebno korisno tijekom developmenta, testiranja i održavanja
+kada se određeni stvarni uređaj želi potpuno izuzeti iz OGP upravljanja.
 
-OGP sprema stanje odabranih automatizacija prije zaštite, isključuje one koje su bile uključene i tijekom recoveryja vraća njihovo prethodno stanje.
+### 4.2 Device entity
+
+Kod Switch i Climate uređaja odaberite glavni entity koji OGP treba
+nadzirati i kontrolirati.
+
+Kod Custom Devicea to je **Device entity** --- entity koji OGP gasi i
+čije stanje nastavlja pratiti tijekom zaštite.
+
+Custom Device entity je potpuno generički i nije ograničen na određeni
+Home Assistant domain.
+
+### 4.3 OFF stanje
+
+Konfigurirajte stanje koje predstavlja da je Device entity OFF.
+
+### 4.4 Korisničke automatizacije
+
+Kod standardnih Switch i Climate uređaja odaberite postojeće korisničke
+automatizacije koje mogu pokrenuti uređaj tijekom OFF-GRID rada.
+
+OGP sprema njihovo stanje prije zaštite, isključuje one koje su bile
+uključene i nakon recoveryja vraća njihovo prethodno stanje.
 
 Utječu samo odabrane automatizacije.
 
-### 4.4 Wait if unavailable
+Custom Device za svoj Control entity ne zahtijeva ovaj odabir
+automatizacija.
 
-**Uključite ovo kada trošilo tijekom prijelaza u OFF-GRID može izgubiti vlastito napajanje ili komunikaciju.**
+### 4.5 Custom Control entity
 
-Trošilo može postati `unavailable` zato što je izgubilo vlastito napajanje.
+Custom Device ima zaseban **Control entity**.
 
-Kada je ova opcija uključena, OGP čeka da se trošilo vrati kako bi se potrebno gašenje/zaključavanje moglo provjeriti i završiti.
+Control entity je potpuno generički i može biti bilo koji Home Assistant
+entity koji odgovara korisnikovoj upravljačkoj logici.
 
-Preporučuje se UPS za Home Assistant i mrežnu/komunikacijsku opremu, ali samo trošilo i dalje može izgubiti napajanje.
+Tijekom OFF-GRID zaštite:
 
-### 4.5 Recovery timeout
+1.  OGP napravi snapshot stanja Control entityja;
+2.  izvrši postojeći OGP redoslijed gašenja Device entityja;
+3.  isključi Control entity;
+4.  nastavlja nadzirati Device entity.
 
-Ovo je timeout za povratak odabranog trošila i završetak potrebnog slijeda gašenja/zaključavanja.
+Control entity može predstavljati cijelu vanjsku integraciju
+upravljanja. Zato OGP ne mora znati niti upravljati svakom pojedinom
+automatizacijom te integracije.
 
-Ako se trošilo ne vrati unutar tog vremena, OGP javlja da se trošilo nije moglo ugasiti i zaključati.
+### 4.6 Custom recovery radnja
 
-Korisnik mora ručno isključiti trošilo. Kada OGP može potvrditi OFF stanje, trošilo može prijeći u zaključano stanje.
+Za Custom Device odaberite:
 
-### 4.6 Command timeout
+-   **Stay OFF** --- Control entity ostaje OFF nakon recoveryja.
+-   **Turn ON** --- Control entity se uključi nakon normalnog recovery
+    slijeda.
+
+Sam Device entity ostaje OFF prema standardnom OGP recovery modelu.
+
+### 4.7 Wait if unavailable
+
+Uključite kada uređaj tijekom prijelaza u OFF-GRID može izgubiti
+vlastito napajanje ili komunikaciju.
+
+### 4.8 Recovery timeout
+
+Postavite koliko dugo OGP čeka potreban status uređaja i završetak
+potrebnog slijeda zaštite.
+
+Ako se uređaj ne može sigurno isključiti i zaključati unutar
+postavljenog timeouta, OGP prijavljuje neuspjeh i korisnik ga mora ručno
+isključiti.
+
+### 4.9 Command timeout
 
 Postavite koliko dugo OGP čeka izvršenje naredbe uređaja.
 
-Vrijednost prilagodite uređaju i njegovoj Home Assistant integraciji.
+## 5. Override
 
-## 5. Postavke uređaja i Lovelace YAML
+Override je privremena iznimka od aktivne OFF-GRID zaštite.
 
-Svaki OGP Device Entry ima vlastite postavke.
+Može koristiti:
 
-Device Entry može se ponovno konfigurirati bez promjene Central Entryja.
+-   minimalno trajanje;
+-   maksimalno trajanje;
+-   traženo trajanje;
+-   PIN zaštitu.
 
-### 5.1 Ponovno generiranje Lovelace YAML-a
+Override ne uključuje automatski uređaj. Korisnik odlučuje hoće li ga
+stvarno uključiti.
 
-Koristite **Regenerate Lovelace YAML** u postavkama Device Entryja kada je generirani dashboard YAML slučajno uklonjen ili ga treba ponovno generirati.
+Dok je Override aktivan, normalni safety reassertion za taj uređaj
+namjerno je izuzet.
 
-Jezik YAML-a može biti English ili Hrvatski.
+Kada Override istekne, zaštita se vraća i uređaj koji je ON ponovno se
+gasi.
 
-Ponovno generiranje YAML-a ne stvara niti ponovno konfigurira Device Entry.
+## 6. OFF-GRID sekvenca zaštite
 
-Pri dodavanju novog Device Entryja generiranje Lovelace YAML-a je opcionalno. Ako opcija nije odabrana, Device Entry se i dalje normalno kreira.
+Kada se potvrdi OFF-GRID:
 
-### 5.2 Brisanje Device Entryja
+1.  OGP potvrđuje OFF-GRID stanje;
+2.  kod standardnih uređaja radi snapshot odabranih korisničkih
+    automatizacija;
+3.  isključuju se odabrane automatizacije koje su bile uključene;
+4.  provjerava se stanje uređaja;
+5.  izvršavaju se potrebne radnje gašenja;
+6.  kod Custom Devicea nakon snapshota Control entity se također
+    isključuje;
+7.  zaštita ostaje aktivna;
+8.  zaštićeni uređaji nastavljaju se nadzirati;
+9.  ako se zaštićeni Device entity uključi bez Overridea, OGP ponovno
+    izvršava njegovu radnju gašenja;
+10. neuspjeh sigurnog gašenja obrađuje se kroz postojeći timeout/failure
+    mehanizam.
 
-Brisanje Device Entryja koristi izvorno Home Assistant brisanje Config Entryja.
-
-Brisanje Device Entryja ne briše Central Entry niti druge OGP Device Entryje.
-
-## 6. Override
-
-Override je funkcija OGP-a i ne zahtijeva Browser Mod, Button-card niti Stack-in-card.
-
-Override koristi:
-
-- podesivo trajanje;
-- PIN zaštitu.
-
-Override ne uključuje automatski trošilo. Nakon prihvaćenog Overridea korisnik ga može ručno uključiti ili isključiti.
-
-Generirano Lovelace Override sučelje omogućuje unos PIN-a i aktivaciju Overridea. PIN se može potvrditi normalnom tipkom Enter ili generiranom akcijom.
-
-### Override dashboard
-
-Button-card i Stack-in-card su opcionalne dashboard komponente koje se preporučuju za generirano Lovelace Override sučelje.
-
-Generirani YAML je samo početni predložak i može se mijenjati.
-
-## 7. Generirani Lovelace YAML
-
-Pri kreiranju odabranog trošila OGP može generirati Lovelace YAML predložak.
-
-Predložak može koristiti:
-
-- Browser Mod;
-- Button-card;
-- Stack-in-card.
-
-OGP ih ne instalira.
-
-Ako potrebna custom kartica nije instalirana, taj dio dashboarda neće se ispravno prikazati. To ne sprječava konfiguraciju OGP-a niti njegovu osnovnu zaštitnu funkcionalnost.
-
-## 8. Sekvenca OFF-GRID zaštite
-
-Kada se potvrdi OFF-GRID rad:
-
-1. potvrđuje se OFF-GRID stanje;
-2. sprema se trenutno stanje odabranih korisničkih automatizacija;
-3. isključuju se odabrane automatizacije koje su bile uključene;
-4. provjerava se stanje odabranih trošila;
-5. odabrana trošila se isključuju kada je potrebno;
-6. nastavlja se njihov nadzor;
-7. ako se trošilo uključi bez aktivnog Overridea, ponovno se isključuje;
-8. nedostupna trošila obrađuju se prema konfiguraciji;
-9. zaštita baterijskog sustava ostaje aktivna tijekom OFF-GRID rada.
-
-## 9. Recovery sekvenca
+## 7. Recovery sekvenca
 
 Kada se potvrdi ON-GRID:
 
-1. pokreće se recovery;
-2. čeka se centralni Recovery delay;
-3. potvrđuje se stabilan ON-GRID;
-4. osvježava se stanje odabranih trošila i zaštite;
-5. odabrane korisničke automatizacije vraćaju se u stanje koje su imale prije zaštite;
-6. zaštitni ciklus se briše.
+1.  pokreće se recovery;
+2.  primjenjuje se centralni Recovery delay;
+3.  potvrđuje se stabilan ON-GRID;
+4.  osvježava se stanje uređaja i zaštite;
+5.  kod standardnih uređaja odabrane automatizacije vraćaju se u stanje
+    koje su imale prije zaštite;
+6.  kod Custom Devicea Control entity slijedi odabranu recovery radnju;
+7.  Device entity ostaje OFF prema standardnom OGP recovery modelu;
+8.  zaštitni ciklus se briše.
 
-Ako se tijekom recoveryja ponovno pojavi OFF-GRID, zaštita baterijskog sustava ima prednost.
+Ako se tijekom recoveryja ponovno pojavi OFF-GRID, zaštita baterijskog
+sustava ima prednost.
 
-## 10. Huawei Solar i druge integracije
+## 8. Safety reassertion i neuspjeh gašenja
 
-OGP je tijekom razvoja testiran s entityjima koje pruža Huawei Solar integracija.
+OGP se ne oslanja samo na jednu naredbu za gašenje.
 
-Huawei Solar **nije dependency OGP-a**. OGP ne uključuje, ne instalira niti distribuira izvorni kod Huawei Solar integracije.
+Dok je zaštita aktivna, OGP nastavlja nadzirati zaštićene Device
+entityje.
 
-Isti princip vrijedi za druge Home Assistant integracije. OGP je projektiran za rad s Home Assistant entityjima koji pružaju potrebna stanja i servise.
+Ako se zaštićeni uređaj uključi bez Overridea, OGP ponovno izvršava
+konfiguriranu radnju gašenja.
+
+Ako se uređaj ne može sigurno isključiti ili potvrditi kao OFF unutar
+odgovarajućeg timeouta, OGP javlja da uređaj nije moguće sigurno
+isključiti i zaključati. Korisnik ga mora ručno isključiti.
+
+Override je namjerna iznimka od safety reassertiona.
+
+## 9. Generirani Lovelace YAML
+
+Generirani Lovelace YAML je početni predložak.
+
+Može koristiti Browser Mod, Button-card i Stack-in-card, ali oni nisu
+dependency osnovne OGP zaštitne funkcionalnosti.
+
+Custom Device YAML može zahtijevati prilagodbu stvarnom Device entityju
+i željenom sučelju.
+
+## 10. Brisanje uređaja i vlasništvo nad resursima
+
+OGP prati resurse koje sam generira.
+
+Pri brisanju Device Entryja OGP uklanja samo resurse koji su
+evidentirani kao OGP-generirani.
+
+Postojeći korisnički resursi ne brišu se samo zato što ih OGP koristi
+ili odabire.
 
 ## 11. Testiranje
 
-Prije oslanjanja na OGP u energetskom sustavu testirajte:
+Prije oslanjanja na OGP testirajte:
 
-- ON-GRID detekciju;
-- OFF-GRID detekciju;
-- potvrdu Power Meter Statusa;
-- OFF upravljanje odabranim trošilom;
-- isključivanje odabranih automatizacija;
-- vraćanje automatizacija;
-- ponovno izvršavanje gašenja;
-- ponašanje kada trošilo postane unavailable;
-- Recovery timeout;
-- recovery nakon ON-GRID povratka;
-- Override s ispravnim PIN-om;
-- Override s pogrešnim PIN-om;
-- trajanje i istek Overridea;
-- Home Assistant obavijesti;
-- Browser Mod popup ako je uključen;
-- odabir kategorija obavijesti;
-- očuvanje notification postavki nakon promjene Centralne konfiguracije;
-- očuvanje notification postavki nakon restarta Home Assistanta;
-- generirano Lovelace sučelje ako se koristi;
-- ponašanje Logova: Isključeno / Upozorenja / Debug.
-
-Za detaljnu dijagnostiku postavite OGP Logove na **Debug** i po potrebi Home Assistant logger za `custom_components.off_grid_protection` na DEBUG. Nakon testiranja vratite OGP Logove na Isključeno ili Upozorenja.
+-   ON-GRID detekciju;
+-   OFF-GRID detekciju;
+-   Power Meter Status potvrdu;
+-   standardni Switch protection;
+-   standardni Climate protection;
+-   Custom Device protection;
+-   snapshot i OFF Control entityja;
+-   Custom recovery Stay OFF;
+-   Custom recovery Turn ON;
+-   ponašanje disabled Device Entryja;
+-   safety reassertion;
+-   failure/timeout obavijest;
+-   Override;
+-   istek Overridea;
+-   ON-GRID recovery;
+-   trajnost notification postavki;
+-   potiskivanje početne startup obavijesti;
+-   preporuku za restart nakon promjene postavki;
+-   generirani Lovelace UI ako se koristi.
 
 ## 12. Rješavanje problema
 
-### Trošilo se ne isključuje
+### Uređajem se ne upravlja
 
-Provjerite odabrani entity, OFF stanje, dostupnost, Home Assistant servis, Command timeout i integraciju uređaja.
+Provjerite je li Device Entry enabled, je li entity ispravan, je li OFF
+stanje ispravno, je li entity dostupan i podržava li odabranu Home
+Assistant radnju.
 
-### Trošilo se ponovno uključuje tijekom OFF-GRID rada
+### Uređaj se ponovno uključi tijekom OFF-GRID rada
 
-Provjerite je li automatizacija koja ga pokreće odabrana u OGP-u. Odabir relevantnih automatizacija preporučuje se radi smanjenja mogućnosti race conditiona.
+Provjerite safety reassertion logove i je li aktivan Override.
 
-### Trošilo postaje unavailable
+### Custom Device ne isključuje vanjski sustav upravljanja
 
-Provjerite napajanje, **Wait if unavailable**, Recovery timeout te dostupnost Home Assistanta i mreže.
+Provjerite Control entity. Mora biti entity koji predstavlja stanje
+uključeno/isključeno vanjskog sustava upravljanja.
 
-### Nema obavijesti
+### Custom Device ne vraća vanjsko upravljanje
 
-Provjerite je li slanje obavijesti uključeno, postoji li barem jedan notification primatelj i je li odgovarajuća kategorija obavijesti uključena.
+Provjerite da je Custom recovery postavljen na **Turn ON** i da Control
+entity podržava ON radnju.
 
-### Nema popupa
+### Uređaj se ne može sigurno isključiti
 
-Provjerite Browser Mod, konfiguraciju popupova, odabrane Browser Mod uređaje i dostupnost Browser Mod klijenta.
-
-Normalne Home Assistant obavijesti ne zahtijevaju Browser Mod.
-
-### Notification postavke nestanu nakon promjene Centralne konfiguracije
-
-U v1.1.3 konfiguracija obavijesti sprema se odvojeno i ne smije se brisati promjenom Centralne konfiguracije. Ako nestane, provjerite OGP logove i stanje Config Entryja.
-
-### Lovelace se ne prikazuje
-
-Provjerite koristi li generirani YAML Button-card, Stack-in-card ili Browser Mod koji nisu instalirani. Instalirajte ih ili prilagodite YAML.
+Provjerite entity, OFF stanje, Command timeout, Recovery timeout i
+integraciju uređaja. Ako OGP prijavi neuspjeh gašenja, uređaj treba
+ručno isključiti.
 
 ### Previše logova
 
-Za normalan rad koristite **Upozorenja** ili nakon testiranja **Isključeno**. **Debug** koristite samo kada su potrebni detaljni dijagnostički podaci.
-
-## 13. Pravilo verzioniranja
-
-**v1.1.3 je zaključana stabilna verzija.**
-
-Budući razvoj koristi novi broj verzije, primjerice:
-
-- `v1.1.4` -- bugfix
-- `v1.2.0` -- nova funkcionalnost
-
-Release v1.1.3 ostaje točna referenca na testiranu stabilnu verziju.
+Nakon testiranja koristite Upozorenja ili Isključeno. Debug koristite za
+dijagnostiku.

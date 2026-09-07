@@ -36,6 +36,10 @@ class DeviceRuntime:
     recovery_started: bool = False
     recovery_completed: bool = False
 
+    # Snapshot of the Custom control entity state captured before protection.
+    # Used by Custom devices instead of automation snapshot/restore.
+    custom_control_state: str | None = None
+
     # Automation states captured before protection.
     # True means the automation was enabled before off-grid.
     automation_states: dict[str, bool] = field(

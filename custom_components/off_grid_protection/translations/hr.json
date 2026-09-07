@@ -311,25 +311,5 @@
         }
       }
     }
-  },
-  "notification_messages": {
-    "automation_alias": "OGP - Obavijesti o zaštiti baterijskog sustava",
-    "automation_description": "Obavještava odabrana odredišta o promjenama mrežnog rada, statusa zaštite, Overridea i sigurnosnim događajima.",
-    "grid_off_title": "⚡ KUĆA – OFF-GRID",
-    "grid_off_message": "Baterijski rad.",
-    "grid_on_title": "🏠 KUĆA – ON-GRID",
-    "grid_on_message": "Mrežni rad.",
-    "override_title": "🔓 OGP – OVERRIDE",
-    "override_message": "Uređaj {{ trigger.event.data.device_name }} je otključan. Trajanje: {{ trigger.event.data.duration_minutes }} min.",
-    "override_expired_title": "🔒 OGP – ZAŠTITA",
-    "override_expired_message": "Override za uređaj {{ trigger.event.data.device_name }} je istekao. Uređaj je ponovno zaključan.",
-    "override_grid_return_title": "🔒 OGP – ZAŠTITA",
-    "override_grid_return_message": "Mreža se vratila. Override za uređaj {{ trigger.event.data.device_name }} je završen.",
-    "locked_title": "🔒 OGP – ZAKLJUČANO",
-    "locked_message": "Uređaj {{ trigger.event.data.device_name }} je zaključan.",
-    "invalid_pin_title": "⚠️ OGP – POGREŠAN PIN",
-    "invalid_pin_message": "Neispravan PIN za Override uređaja {{ trigger.event.data.device_name }}.",
-    "recovery_title": "🔄 OGP – OPORAVAK",
-    "recovery_message": "Oporavak nakon povratka mreže je završen. Zaštita baterije vraćena je u normalan rad."
   }
 }

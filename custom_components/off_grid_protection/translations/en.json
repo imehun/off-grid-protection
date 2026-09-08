@@ -320,26 +320,4 @@
       }
     }
   },
-  "notification_messages": {
-    "automation_alias": "OGP - Battery Protection Notifications",
-    "automation_description": "Notifies selected targets about grid operation, protection status, Override and security events.",
-    "grid_off_title": "⚡ HOUSE – OFF-GRID",
-    "grid_off_message": "Battery operation.",
-    "grid_on_title": "🏠 HOUSE – ON-GRID",
-    "grid_on_message": "Grid operation.",
-    "override_title": "🔓 OGP – OVERRIDE",
-    "override_message": "Device {{ trigger.event.data.device_name }} is unlocked. Duration: {{ trigger.event.data.duration_minutes }} min.",
-    "override_expired_title": "🔒 OGP – PROTECTION",
-    "override_expired_message": "Override for device {{ trigger.event.data.device_name }} expired. The device is locked again.",
-    "override_grid_return_title": "🔒 OGP – PROTECTION",
-    "override_grid_return_message": "Grid returned. Override for device {{ trigger.event.data.device_name }} ended.",
-    "locked_title": "🔒 OGP – LOCKED",
-    "locked_message": "Device {{ trigger.event.data.device_name }} is locked.",
-    "invalid_pin_title": "⚠️ OGP – INVALID PIN",
-    "invalid_pin_message": "Invalid Override PIN for device {{ trigger.event.data.device_name }}.",
-    "recovery_title": "🔄 OGP – RECOVERY",
-    "recovery_message": "Grid recovery completed. Battery protection is restored to normal operation.",
-    "shutdown_failed_title": "⚠️ OGP – DEVICE NOT SAFE",
-    "shutdown_failed_message": "Device {{ trigger.event.data.device_name }} could not be safely shut down. The device is not locked."
-  }
 }

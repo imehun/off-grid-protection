@@ -48,6 +48,9 @@
           "wait_for_unavailable": "Čekaj ako je nedostupno",
           "recovery_timeout": "Timeout oporavka",
           "command_timeout": "Timeout naredbe"
+        },
+        "data_description": {
+          "wait_for_unavailable": "Ako je uređaj nedostupan, OGP čeka njegov povratak tijekom Timeouta oporavka. Timeout naredbe odnosi se samo na naredbu gašenja nakon završetka čekanja oporavka."
         }
       },
       "switch": {
@@ -60,6 +63,9 @@
           "wait_for_unavailable": "Čekaj ako je nedostupno",
           "recovery_timeout": "Timeout oporavka",
           "command_timeout": "Timeout naredbe"
+        },
+        "data_description": {
+          "wait_for_unavailable": "Ako je uređaj nedostupan, OGP čeka njegov povratak tijekom Timeouta oporavka. Timeout naredbe odnosi se samo na naredbu gašenja nakon završetka čekanja oporavka."
         }
       },
       "custom": {
@@ -77,7 +83,8 @@
         },
         "data_description": {
           "recovery_action": "Akcija koja se primjenjuje na upravljački entitet nakon oporavka na mrežu.",
-          "control_entity_id": "Entitet kojim OGP isključuje Custom upravljanje i po potrebi ga ponovno uključuje tijekom oporavka."
+          "control_entity_id": "Entitet kojim OGP isključuje Custom upravljanje i po potrebi ga ponovno uključuje tijekom oporavka.",
+          "wait_for_unavailable": "Ako je uređaj nedostupan, OGP čeka njegov povratak tijekom Timeouta oporavka. Timeout naredbe odnosi se samo na naredbu gašenja nakon završetka čekanja oporavka."
         }
       },
       "automations": {
@@ -198,7 +205,8 @@
         "data_description": {
           "automations": "Prikazuju se automatizacije koje referenciraju odabrani uređaj.",
           "show_all_automations": "Prikaži sve Home Assistant automatizacije umjesto samo povezanih s odabranim uređajem.",
-          "recovery_action": "Akcija koja se primjenjuje na upravljački entitet nakon oporavka na mrežu."
+          "recovery_action": "Akcija koja se primjenjuje na upravljački entitet nakon oporavka na mrežu.",
+          "wait_for_unavailable": "Ako je uređaj nedostupan, OGP čeka njegov povratak tijekom Timeouta oporavka. Timeout naredbe odnosi se samo na naredbu gašenja nakon završetka čekanja oporavka."
         }
       },
       "central_notifications": {
@@ -311,5 +319,27 @@
         }
       }
     }
+  },
+  "notification_messages": {
+    "automation_alias": "OGP - Obavijesti o zaštiti baterijskog sustava",
+    "automation_description": "Obavještava odabrana odredišta o promjenama mrežnog rada, statusa zaštite, Overridea i sigurnosnim događajima.",
+    "grid_off_title": "⚡ KUĆA – OFF-GRID",
+    "grid_off_message": "Baterijski rad.",
+    "grid_on_title": "🏠 KUĆA – ON-GRID",
+    "grid_on_message": "Mrežni rad.",
+    "override_title": "🔓 OGP – OVERRIDE",
+    "override_message": "Uređaj {{ trigger.event.data.device_name }} je otključan. Trajanje: {{ trigger.event.data.duration_minutes }} min.",
+    "override_expired_title": "🔒 OGP – ZAŠTITA",
+    "override_expired_message": "Override za uređaj {{ trigger.event.data.device_name }} je istekao. Uređaj je ponovno zaključan.",
+    "override_grid_return_title": "🔒 OGP – ZAŠTITA",
+    "override_grid_return_message": "Mreža se vratila. Override za uređaj {{ trigger.event.data.device_name }} je završen.",
+    "locked_title": "🔒 OGP – ZAKLJUČANO",
+    "locked_message": "Uređaj {{ trigger.event.data.device_name }} je zaključan.",
+    "invalid_pin_title": "⚠️ OGP – POGREŠAN PIN",
+    "invalid_pin_message": "Neispravan PIN za Override uređaja {{ trigger.event.data.device_name }}.",
+    "recovery_title": "🔄 OGP – OPORAVAK",
+    "recovery_message": "Oporavak nakon povratka mreže je završen. Zaštita baterije vraćena je u normalan rad.",
+    "shutdown_failed_title": "⚠️ OGP – UREĐAJ NIJE SIGURAN",
+    "shutdown_failed_message": "Uređaj {{ trigger.event.data.device_name }} nije moguće sigurno isključiti. Uređaj nije zaključan."
   }
 }

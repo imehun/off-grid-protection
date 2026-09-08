@@ -311,7 +311,7 @@ class OffGridProtectionConfigFlow(
                 False,
             ):
                 self._central_config = central_config
-                self._central_changed = False
+                self._central_changed = central_changed
                 return await self.async_step_central_notifications()
 
             return await self._async_create_central_entry(

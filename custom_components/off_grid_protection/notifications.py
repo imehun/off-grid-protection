@@ -322,6 +322,11 @@ def _build_automation(
                 "event_type": "off_grid_protection_locked",
                 "id": "protection_locked",
             },
+            {
+                "trigger": "event",
+                "event_type": "off_grid_protection_shutdown_failed",
+                "id": "shutdown_failed",
+            },
         ])
 
     if "security" in notification_events:
@@ -407,6 +412,13 @@ def _build_automation(
                 "sequence": notify_actions(
                     text("locked_title"),
                     text("locked_message"),
+                ),
+            },
+            {
+                "conditions": [{"condition": "trigger", "id": "shutdown_failed"}],
+                "sequence": notify_actions(
+                    text("shutdown_failed_title"),
+                    text("shutdown_failed_message"),
                 ),
             },
             {

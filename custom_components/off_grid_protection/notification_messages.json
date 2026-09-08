@@ -19,7 +19,9 @@
     "recovery_title": "🔄 OGP – RECOVERY",
     "recovery_message": "Grid recovery completed. Battery protection is restored to normal operation.",
     "restart_required_title": "OGP – Home Assistant restart recommended",
-    "restart_required_message": "OGP settings have changed. A Home Assistant restart is recommended so all changes are fully applied."
+    "restart_required_message": "OGP settings have changed. A Home Assistant restart is recommended so all changes are fully applied.",
+    "shutdown_failed_title": "⚠️ OGP – DEVICE NOT SAFE",
+    "shutdown_failed_message": "Device {{ trigger.event.data.device_name }} could not be safely shut down. The device is not locked."
   },
   "hr": {
     "automation_alias": "OGP - Obavijesti o zaštiti baterijskog sustava",
@@ -41,6 +43,8 @@
     "recovery_title": "🔄 OGP – OPORAVAK",
     "recovery_message": "Oporavak nakon povratka mreže je završen. Zaštita baterije vraćena je u normalan rad.",
     "restart_required_title": "OGP – Potreban restart Home Assistanta",
-    "restart_required_message": "Postavke OGP-a su promijenjene. Preporučuje se restart Home Assistanta kako bi se sve promjene u potpunosti primijenile."
+    "restart_required_message": "Postavke OGP-a su promijenjene. Preporučuje se restart Home Assistanta kako bi se sve promjene u potpunosti primijenile.",
+    "shutdown_failed_title": "⚠️ OGP – UREĐAJ NIJE SIGURAN",
+    "shutdown_failed_message": "Uređaj {{ trigger.event.data.device_name }} nije moguće sigurno isključiti. Uređaj nije zaključan."
   }
 }

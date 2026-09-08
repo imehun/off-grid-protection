@@ -79,6 +79,9 @@ class OffGridCoordinator:
         self._unsubscribers = []
         self._sync_unsubscriber = None
         self._recovery_task: asyncio.Task | None = None
+        # Shutdown tasks are tracked per device so one device timeout never
+        # blocks the shutdown processing of the other devices.
+        self._shutdown_tasks: dict[str, asyncio.Task] = {}
 
         # Startup baseline: the initial inverter state is established
         # during initialization and must not be treated as a grid transition.
@@ -392,9 +395,14 @@ class OffGridCoordinator:
                     return True
 
         if not runtime.available:
-            return False
+            # An unavailable device must not silently disappear from the
+            # protection cycle.  If configured, its own shutdown task waits
+            # for recovery while all other devices continue independently.
+            return bool(device.wait_for_unavailable) or device.device_type == "custom"
 
         if runtime.state is None:
+            if device.device_type == "custom":
+                return True
             return False
 
         normalized_state = runtime.state.strip().lower()
@@ -483,7 +491,6 @@ class OffGridCoordinator:
                     control_entity_id,
                     state.state,
                 )
-            return
 
         if runtime.automation_states:
             self._log(logging.DEBUG, 
@@ -747,6 +754,119 @@ class OffGridCoordinator:
             entity_id,
         )
 
+    async def _wait_for_device_available(
+        self,
+        device: OffGridDevice,
+        runtime: DeviceRuntime,
+    ) -> bool:
+        """Wait for an unavailable device to return, if configured.
+
+        This wait belongs to the individual device task.  It therefore never
+        blocks shutdown processing for the other OGP devices.
+        """
+
+        state = self.hass.states.get(device.entity_id)
+        if state is not None and state.state not in (
+            "unavailable",
+            "unknown",
+        ):
+            return True
+
+        if not device.wait_for_unavailable:
+            return False
+
+        # Recovery timeout is an independent per-device waiting phase.
+        # It is intentionally not capped by command_timeout.
+        timeout = device.recovery_timeout
+        deadline = self.hass.loop.time() + timeout
+
+        self._log(
+            logging.WARNING,
+            "OFF-GRID PROTECTION: WAITING FOR DEVICE RECOVERY: %s -> timeout=%ss",
+            device.name,
+            timeout,
+        )
+
+        while self.hass.loop.time() < deadline:
+            state = self.hass.states.get(device.entity_id)
+            if state is not None and state.state not in (
+                "unavailable",
+                "unknown",
+            ):
+                runtime.state = state.state
+                runtime.available = True
+                self._notify_listeners()
+                self._log(
+                    logging.WARNING,
+                    "OFF-GRID PROTECTION: DEVICE RECOVERED: %s -> state=%s",
+                    device.name,
+                    state.state,
+                )
+                return True
+
+            await asyncio.sleep(0.5)
+
+        state = self.hass.states.get(device.entity_id)
+        runtime.state = state.state if state is not None else None
+        runtime.available = False
+        return False
+
+
+    def _shutdown_task_done(
+        self,
+        device: OffGridDevice,
+        runtime: DeviceRuntime,
+        task: asyncio.Task,
+    ) -> None:
+        """Finalize one device shutdown without affecting other devices."""
+        self._shutdown_tasks.pop(device.id, None)
+
+        try:
+            result = task.result()
+        except asyncio.CancelledError:
+            runtime.shutdown_failed = True
+            runtime.shutdown_confirmed = False
+            self._log(
+                logging.WARNING,
+                "OFF-GRID PROTECTION: SHUTDOWN TASK CANCELLED: %s",
+                device.name,
+            )
+        except Exception as err:
+            runtime.shutdown_failed = True
+            runtime.shutdown_confirmed = False
+            self._log(
+                logging.ERROR,
+                "OFF-GRID PROTECTION: SHUTDOWN TASK FAILED: %s -> %s",
+                device.name,
+                err,
+            )
+        else:
+            if result is False:
+                runtime.shutdown_confirmed = False
+
+        if runtime.shutdown_confirmed and not runtime.override_active:
+            self._lock_device_if_shutdown_confirmed(
+                device,
+                runtime,
+            )
+        elif not runtime.shutdown_confirmed:
+            runtime.locked = False
+            self._log(
+                logging.WARNING,
+                "OFF-GRID PROTECTION: DEVICE NOT LOCKED: %s -> shutdown not confirmed",
+                device.name,
+            )
+
+        if not self._shutdown_tasks:
+            self.runtime.complete_protection_cycle()
+            self._log(
+                logging.WARNING,
+                "OFF-GRID PROTECTION: ALL DEVICE SHUTDOWN TASKS COMPLETE",
+            )
+
+        self._notify_listeners()
+
+
     async def _shutdown_device(
         self,
         device: OffGridDevice,
@@ -765,6 +885,11 @@ class OffGridCoordinator:
         runtime.shutdown_requested = True
         runtime.shutdown_confirmed = False
         runtime.shutdown_failed = False
+
+        # Command timeout starts when the shutdown command phase starts.
+        # If the device is unavailable and waiting is enabled, recovery_timeout
+        # is a separate preceding phase. Each device owns both timers.
+        command_deadline = None
 
         self._notify_listeners()
 
@@ -815,41 +940,218 @@ class OffGridCoordinator:
             return
 
         try:
-            await self.hass.services.async_call(
-                domain,
-                service,
-                {
-                    "entity_id": entity_id,
-                    **service_data,
-                },
-                blocking=True,
-            )
+            if device.device_type != "custom":
+                state = self.hass.states.get(entity_id)
+                initially_unavailable = (
+                    state is None
+                    or state.state in ("unavailable", "unknown")
+                )
+
+                if initially_unavailable and device.wait_for_unavailable:
+                    recovered = await self._wait_for_device_available(
+                        device,
+                        runtime,
+                    )
+
+                    if not recovered:
+                        runtime.shutdown_failed = True
+                        runtime.shutdown_confirmed = False
+                        self._notify_listeners()
+                        self._log(
+                            logging.ERROR,
+                            "OFF-GRID PROTECTION: NOT SAFE: %s -> device did not recover within recovery timeout",
+                            device.name,
+                        )
+                        self.hass.bus.async_fire(
+                            "off_grid_protection_shutdown_failed",
+                            {
+                                "device_id": device.id,
+                                "device_name": device.name,
+                                "entity_id": entity_id,
+                                "reason": "recovery_timeout",
+                            },
+                        )
+                        return
+
+                state = self.hass.states.get(entity_id)
+                if state is None or state.state in ("unavailable", "unknown"):
+                    runtime.shutdown_failed = True
+                    runtime.shutdown_confirmed = False
+                    self._notify_listeners()
+                    self._log(
+                        logging.ERROR,
+                        "OFF-GRID PROTECTION: NOT SAFE: %s -> device unavailable after recovery phase",
+                        device.name,
+                    )
+                    self.hass.bus.async_fire(
+                        "off_grid_protection_shutdown_failed",
+                        {
+                            "device_id": device.id,
+                            "device_name": device.name,
+                            "entity_id": entity_id,
+                            "reason": "recovery_timeout",
+                        },
+                    )
+                    return
 
             if device.device_type == "custom":
+                # The main Custom entity may legitimately be unavailable
+                # (for example when its integration is disabled). The
+                # control entity is the safety/kill switch and must still
+                # be turned OFF in that case.
+                main_state = self.hass.states.get(entity_id)
+                if (
+                    main_state is not None
+                    and main_state.state not in (
+                        "unavailable",
+                        "unknown",
+                    )
+                ):
+                    try:
+                        await self.hass.services.async_call(
+                            domain,
+                            service,
+                            {
+                                "entity_id": entity_id,
+                                **service_data,
+                            },
+                            blocking=True,
+                        )
+                    except Exception as err:
+                        self._log(
+                            logging.WARNING,
+                            "OFF-GRID CUSTOM: main entity shutdown failed: %s -> %s -> continuing with control entity",
+                            device.name,
+                            err,
+                        )
+                else:
+                    self._log(
+                        logging.WARNING,
+                        "OFF-GRID CUSTOM: main entity unavailable: %s -> continuing with control entity shutdown",
+                        device.name,
+                    )
+
                 control_entity_id = device.control_entity_id
                 if not control_entity_id or "." not in control_entity_id:
                     runtime.shutdown_failed = True
+                    self._notify_listeners()
                     self._log(
                         logging.ERROR,
                         "OFF-GRID CUSTOM: control entity missing/invalid: %s -> %s",
                         device.name,
                         control_entity_id,
                     )
+                    self.hass.bus.async_fire(
+                        "off_grid_protection_shutdown_failed",
+                        {
+                            "device_id": device.id,
+                            "device_name": device.name,
+                            "entity_id": entity_id,
+                            "reason": "control_entity_invalid",
+                        },
+                    )
                     return
 
-                control_domain = control_entity_id.split(".", 1)[0]
-                await self.hass.services.async_call(
-                    control_domain,
-                    "turn_off",
-                    {"entity_id": control_entity_id},
-                    blocking=True,
+                await self._shutdown_control_entity(
+                    device,
+                    runtime,
                 )
 
-                self._log(
-                    logging.WARNING,
-                    "OFF-GRID CUSTOM: CONTROL ENTITY OFF: %s -> %s",
-                    device.name,
-                    control_entity_id,
+                control_state = self.hass.states.get(control_entity_id)
+                if (
+                    control_state is None
+                    or control_state.state != "off"
+                ):
+                    runtime.shutdown_failed = True
+                    runtime.shutdown_confirmed = False
+                    self._notify_listeners()
+                    self._log(
+                        logging.ERROR,
+                        "OFF-GRID CUSTOM: NOT SAFE: %s -> control entity is not OFF",
+                        device.name,
+                    )
+                    self.hass.bus.async_fire(
+                        "off_grid_protection_shutdown_failed",
+                        {
+                            "device_id": device.id,
+                            "device_name": device.name,
+                            "entity_id": entity_id,
+                            "reason": "control_entity_not_off",
+                        },
+                    )
+                    return
+
+                # The control/kill entity can be safely OFF while the main
+                # entity is still unavailable. That is not proof that the
+                # main device itself is OFF. Recovery timeout is the only
+                # unavailable-state waiting phase. If the main entity returns,
+                # continue with the normal shutdown command and command timeout.
+                if not await self._wait_for_device_available(
+                    device,
+                    runtime,
+                ):
+                    runtime.shutdown_failed = True
+                    runtime.shutdown_confirmed = False
+                    self._notify_listeners()
+                    self._log(
+                        logging.ERROR,
+                        "OFF-GRID CUSTOM: NOT SAFE: %s -> main entity did not recover within recovery timeout",
+                        device.name,
+                    )
+                    self.hass.bus.async_fire(
+                        "off_grid_protection_shutdown_failed",
+                        {
+                            "device_id": device.id,
+                            "device_name": device.name,
+                            "entity_id": entity_id,
+                            "reason": "recovery_timeout",
+                        },
+                    )
+                    return
+
+                # If the main entity recovered, explicitly issue turn_off.
+                # The common confirmation loop below then uses command_timeout
+                # to require a real OFF state.
+                try:
+                    await self.hass.services.async_call(
+                        domain,
+                        service,
+                        {
+                            "entity_id": entity_id,
+                            **service_data,
+                        },
+                        blocking=True,
+                    )
+                except Exception as err:
+                    runtime.shutdown_failed = True
+                    runtime.shutdown_confirmed = False
+                    self._notify_listeners()
+                    self._log(
+                        logging.WARNING,
+                        "OFF-GRID CUSTOM: main entity shutdown failed after recovery: %s -> %s",
+                        device.name,
+                        err,
+                    )
+                    self.hass.bus.async_fire(
+                        "off_grid_protection_shutdown_failed",
+                        {
+                            "device_id": device.id,
+                            "device_name": device.name,
+                            "entity_id": entity_id,
+                            "reason": "main_entity_shutdown_failed",
+                        },
+                    )
+                    return
+
+            else:
+                await self.hass.services.async_call(
+                    domain,
+                    service,
+                    {
+                        "entity_id": entity_id,
+                        **service_data,
+                    },
+                    blocking=True,
                 )
 
         except Exception as err:
@@ -872,19 +1174,56 @@ class OffGridCoordinator:
             device.name,
         )
 
-        timeout = device.command_timeout
-
-        deadline = (
-            self.hass.loop.time()
-            + timeout
-        )
+        # Command timeout starts when the shutdown command has been sent.
+        # Recovery timeout is a separate, preceding phase.
+        deadline = self.hass.loop.time() + device.command_timeout
 
         while self.hass.loop.time() < deadline:
             state = self.hass.states.get(
                 entity_id
             )
 
-            if (
+            if device.device_type == "custom":
+                control_state = self.hass.states.get(
+                    device.control_entity_id
+                )
+
+                control_off = (
+                    control_state is not None
+                    and control_state.state == "off"
+                )
+
+                main_off = (
+                    state is not None
+                    and state.state == device.off_state
+                )
+
+                main_unavailable = (
+                    state is None
+                    or state.state in (
+                        "unavailable",
+                        "unknown",
+                    )
+                )
+
+                if control_off and main_off:
+                    runtime.state = state.state
+                    runtime.available = True
+                    runtime.shutdown_confirmed = True
+                    runtime.shutdown_failed = False
+
+                    self._notify_listeners()
+
+                    self._log(
+                        logging.WARNING,
+                        "OFF-GRID CUSTOM: SHUTDOWN CONFIRMED: %s -> main=%s, control=off",
+                        device.name,
+                        runtime.state,
+                    )
+
+                    return
+
+            elif (
                 state is not None
                 and state.state == device.off_state
             ):
@@ -925,6 +1264,7 @@ class OffGridCoordinator:
         )
 
         runtime.shutdown_failed = True
+        runtime.shutdown_confirmed = False
 
         self._notify_listeners()
 
@@ -935,6 +1275,16 @@ class OffGridCoordinator:
             device.name,
             device.off_state,
             runtime.state,
+        )
+
+        self.hass.bus.async_fire(
+            "off_grid_protection_shutdown_failed",
+            {
+                "device_id": device.id,
+                "device_name": device.name,
+                "entity_id": entity_id,
+                "reason": "shutdown_timeout",
+            },
         )
 
     async def _run_protection_cycle(self) -> None:
@@ -1027,7 +1377,7 @@ class OffGridCoordinator:
                 runtime.available,
             )
 
-            if not runtime.available:
+            if not runtime.available and device.device_type != "custom":
                 runtime.shutdown_requested = False
                 runtime.shutdown_confirmed = False
                 runtime.shutdown_failed = True
@@ -1049,6 +1399,14 @@ class OffGridCoordinator:
                 )
 
                 continue
+
+            if not runtime.available and device.device_type == "custom":
+                self._log(logging.WARNING,
+                    "OFF-GRID CUSTOM: "
+                    "MAIN ENTITY UNAVAILABLE: %s -> "
+                    "evaluating control entity shutdown",
+                    device.name,
+                )
 
             shutdown_required = (
                 self._device_requires_shutdown(
@@ -1086,80 +1444,72 @@ class OffGridCoordinator:
 
         # ---------------------------------------------------------
         # PHASE 4:
-        # Send shutdown commands independently.
+        # Start each device shutdown independently.
+        #
+        # IMPORTANT: do NOT await all shutdown tasks here. Every device
+        # owns its own command/recovery timeout. Waiting for one device
+        # (for example an unavailable Custom climate) must never delay the
+        # shutdown command for another device that is ready to be protected.
         # ---------------------------------------------------------
 
         if shutdown_devices:
-            self._log(logging.WARNING, 
-                "OFF-GRID PROTECTION: "
-                "STARTING PARALLEL SHUTDOWN FOR %s DEVICE(S)",
+            self._log(
+                logging.WARNING,
+                "OFF-GRID PROTECTION: STARTING INDEPENDENT SHUTDOWN FOR %s DEVICE(S)",
                 len(shutdown_devices),
             )
 
-            shutdown_tasks = [
-                asyncio.create_task(
+            for device, runtime in shutdown_devices:
+                old_task = self._shutdown_tasks.get(device.id)
+                if old_task is not None and not old_task.done():
+                    self._log(
+                        logging.WARNING,
+                        "OFF-GRID PROTECTION: SHUTDOWN ALREADY RUNNING: %s",
+                        device.name,
+                    )
+                    continue
+
+                task = asyncio.create_task(
                     self._shutdown_device(
                         device,
                         runtime,
-                    )
+                    ),
+                    name=f"ogp_shutdown_{device.id}",
                 )
-                for device, runtime in shutdown_devices
-            ]
+                self._shutdown_tasks[device.id] = task
+                task.add_done_callback(
+                    lambda completed_task, d=device, r=runtime: 
+                    self._shutdown_task_done(d, r, completed_task)
+                )
 
-            results = await asyncio.gather(
-                *shutdown_tasks,
-                return_exceptions=True,
-            )
-
-            for (
-                device_runtime,
-                result,
-            ) in zip(
-                shutdown_devices,
-                results,
-            ):
-                device, runtime = device_runtime
-
-                if isinstance(
-                    result,
-                    Exception,
-                ):
-                    runtime.shutdown_failed = True
-
-                    self._log(logging.ERROR, 
-                        "OFF-GRID PROTECTION: "
-                        "SHUTDOWN TASK FAILED: %s -> %s",
-                        device.name,
-                        result,
-                    )
-
-        self.runtime.complete_protection_cycle()
-
-        # The protection cycle locks every protected device.
-        # Override is the controlled exception for a device.
+        # Devices that did not need a shutdown command may already be in
+        # their configured OFF state and can be locked immediately. Devices
+        # with an active shutdown task are finalized by _shutdown_task_done
+        # only after their own shutdown is positively confirmed.
         for device in self._active_devices():
-            runtime = self.runtime.get_device(
-                device.id
-            )
-
-            if runtime is None:
+            runtime = self.runtime.get_device(device.id)
+            if runtime is None or runtime.override_active:
                 continue
 
-            runtime.locked = True
+            if not runtime.shutdown_requested:
+                if runtime.state == device.off_state:
+                    runtime.shutdown_confirmed = True
+                    runtime.shutdown_failed = False
+                    self._lock_device_if_shutdown_confirmed(
+                        device,
+                        runtime,
+                    )
+                else:
+                    runtime.locked = False
 
-            self.hass.bus.async_fire(
-                "off_grid_protection_locked",
-                {
-                    "device_id": device.id,
-                    "device_name": device.name,
-                },
-            )
+        if not self._shutdown_tasks:
+            self.runtime.complete_protection_cycle()
 
         self._notify_listeners()
 
-        self._log(logging.WARNING, 
-            "OFF-GRID PROTECTION: "
-            "PROTECTION CYCLE COMPLETE"
+        self._log(
+            logging.WARNING,
+            "OFF-GRID PROTECTION: PROTECTION CYCLE STARTED - DEVICE TASKS RUN INDEPENDENTLY",
         )
 
     async def async_activate_override(
@@ -1509,7 +1859,7 @@ class OffGridCoordinator:
             )
             return
 
-        if not runtime.available:
+        if not runtime.available and device.device_type != "custom":
             self._log(logging.WARNING, 
                 "OFF-GRID PROTECTION: "
                 "REASSERT SHUTDOWN SKIPPED - "
@@ -1517,6 +1867,14 @@ class OffGridCoordinator:
                 device.name,
             )
             return
+
+        if not runtime.available and device.device_type == "custom":
+            self._log(logging.WARNING,
+                "OFF-GRID CUSTOM: "
+                "MAIN ENTITY UNAVAILABLE: %s -> "
+                "checking control entity for reassert",
+                device.name,
+            )
 
         if not self._device_requires_shutdown(
             device,
@@ -1834,6 +2192,40 @@ class OffGridCoordinator:
             "RECOVERY COMPLETE"
         )
 
+    def _lock_device_if_shutdown_confirmed(
+        self,
+        device: OffGridDevice,
+        runtime: DeviceRuntime,
+    ) -> None:
+        """Lock a device only after its OFF state is positively confirmed."""
+        if runtime.override_active:
+            return
+
+        if not runtime.shutdown_confirmed:
+            return
+
+        if runtime.locked:
+            return
+
+        runtime.locked = True
+
+        self.hass.bus.async_fire(
+            "off_grid_protection_locked",
+            {
+                "device_id": device.id,
+                "device_name": device.name,
+            },
+        )
+
+        self._log(
+            logging.WARNING,
+            "OFF-GRID PROTECTION: "
+            "DEVICE LOCKED AFTER CONFIRMED OFF: %s",
+            device.name,
+        )
+
+        self._notify_listeners()
+
     async def _async_state_changed(
         self,
         event: Event,
@@ -1922,22 +2314,37 @@ class OffGridCoordinator:
             not previous_available
             and runtime.available
         ):
-            runtime.shutdown_failed = False
             runtime.shutdown_requested = False
 
             runtime.shutdown_confirmed = (
                 runtime.state == device.off_state
             )
 
-            self._log(logging.WARNING, 
+            runtime.shutdown_failed = not runtime.shutdown_confirmed
+
+            self._log(logging.WARNING,
                 "OFF-GRID PROTECTION: "
                 "DEVICE RECOVERED: %s -> "
                 "previous_state=%s, state=%s, "
-                "available=True, shutdown_failed=False",
+                "available=True, shutdown_confirmed=%s",
                 device.name,
                 previous_state,
                 runtime.state,
+                runtime.shutdown_confirmed,
             )
+
+            if (
+                self.runtime.grid_status == GridStatus.OFF_GRID
+                and self.runtime.protection_active
+                and not runtime.override_active
+            ):
+                if runtime.shutdown_confirmed:
+                    self._lock_device_if_shutdown_confirmed(
+                        device,
+                        runtime,
+                    )
+                else:
+                    runtime.shutdown_requested = True
 
         if (
             runtime.shutdown_requested
@@ -1947,12 +2354,22 @@ class OffGridCoordinator:
             runtime.shutdown_confirmed = True
             runtime.shutdown_failed = False
 
-            self._log(logging.WARNING, 
+            self._log(logging.WARNING,
                 "OFF-GRID PROTECTION: "
                 "SHUTDOWN CONFIRMED BY EVENT: %s -> state=%s",
                 device.name,
                 new_state.state,
             )
+
+            if (
+                self.runtime.grid_status == GridStatus.OFF_GRID
+                and self.runtime.protection_active
+                and not runtime.override_active
+            ):
+                self._lock_device_if_shutdown_confirmed(
+                    device,
+                    runtime,
+                )
 
         self._notify_listeners()
 
@@ -2133,13 +2550,25 @@ class OffGridCoordinator:
                 if runtime is None:
                     continue
 
-                if not runtime.available:
+                if (
+                    not runtime.available
+                    and device.device_type != "custom"
+                ):
                     continue
 
                 if runtime.override_active:
                     continue
 
-                if runtime.state in (
+                if device.device_type == "custom":
+                    control_state = self.hass.states.get(
+                        device.control_entity_id
+                    )
+                    if (
+                        control_state is None
+                        or control_state.state != "on"
+                    ):
+                        continue
+                elif runtime.state in (
                     device.off_state,
                     "unavailable",
                     "unknown",
@@ -2338,6 +2767,12 @@ class OffGridCoordinator:
                 task.cancel()
 
         self._override_tasks.clear()
+
+        for task in self._shutdown_tasks.values():
+            if not task.done():
+                task.cancel()
+
+        self._shutdown_tasks.clear()
 
         self._unsubscribe_from_devices()
 

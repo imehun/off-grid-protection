@@ -437,7 +437,6 @@
   "issues": {
     "central_restart_required": {
       "title": "Potreban je restart Home Assistanta",
-      "description": "OGP Central je ponovno omogućen. Home Assistant se mora restartati kako bi se svi OGP uređaji ispravno učitali.",
       "fix_flow": {
         "step": {
           "init": {

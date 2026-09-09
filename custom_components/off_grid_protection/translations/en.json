@@ -437,7 +437,6 @@
   "issues": {
     "central_restart_required": {
       "title": "Home Assistant restart required",
-      "description": "OGP Central has been enabled again. Home Assistant must be restarted so all OGP devices can be loaded correctly.",
       "fix_flow": {
         "step": {
           "init": {

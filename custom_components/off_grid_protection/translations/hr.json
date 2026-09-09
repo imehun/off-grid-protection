@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "OGP – Off-grid Protection",
-        "description": "Konfigurirajte OGP – Off-grid Protection.\n\n### 📚 Dokumentacija\n\n[📖 Konfiguracija (English)](https://github.com/imehun/off-grid-protection/blob/main/CONFIGURATION.md)\n\n[📚 Konfiguracija (Hrvatski)](https://github.com/imehun/off-grid-protection/blob/main/CONFIGURATION_hr.md)\n\n[🐙 GitHub repozitorij](https://github.com/imehun/off-grid-protection)",
+        "description": "Konfigurirajte OGP – Off-grid Protection.\\n\\n### 📚 Dokumentacija\\n\\n[📖 Konfiguracija (English)]({configuration_en_url})\\n\\n[📚 Konfiguracija (Hrvatski)]({configuration_hr_url})\\n\\n[🐙 GitHub repozitorij]({github_url})",
         "data": {
           "name": "Naziv"
         }

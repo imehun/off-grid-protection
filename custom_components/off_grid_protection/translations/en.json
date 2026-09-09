@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Off-grid Protection",
-        "description": "Configure Off-grid Protection.\n\n### 📚 Documentation\n\n[📖 Configuration (English)](https://github.com/imehun/off-grid-protection/blob/main/CONFIGURATION.md)\n\n[📚 Konfiguracija (Hrvatski)](https://github.com/imehun/off-grid-protection/blob/main/CONFIGURATION_hr.md)\n\n[🐙 GitHub repository](https://github.com/imehun/off-grid-protection)",
+        "description": "Configure Off-grid Protection.\\n\\n### 📚 Documentation\\n\\n[📖 Configuration (English)]({configuration_en_url})\\n\\n[📚 Konfiguracija (Hrvatski)]({configuration_hr_url})\\n\\n[🐙 GitHub repository]({github_url})",
         "data": {
           "name": "Name"
         }

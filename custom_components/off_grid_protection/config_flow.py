@@ -178,6 +178,11 @@ class OffGridProtectionConfigFlow(
         return self.async_show_form(
             step_id="user",
             data_schema=schema,
+            description_placeholders={
+                "configuration_en_url": "https://github.com/imehun/off-grid-protection/blob/main/CONFIGURATION.md",
+                "configuration_hr_url": "https://github.com/imehun/off-grid-protection/blob/main/CONFIGURATION_hr.md",
+                "github_url": "https://github.com/imehun/off-grid-protection",
+            },
         )
 
     async def async_step_type(

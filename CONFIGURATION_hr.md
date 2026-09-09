@@ -1,6 +1,6 @@
 # OGP --- Upute za konfiguraciju
 
-Detaljne upute za konfiguraciju OGP-a v1.1.4.
+Detaljne upute za konfiguraciju OGP-a v1.2.0.
 
 ## 1. Zahtjevi i opcionalne komponente
 
@@ -89,15 +89,40 @@ Debug je namijenjen konfiguraciji, testiranju i dijagnostici.
 
 ### 3.5 Obavijesti
 
-Obavijesti su opcionalne.
+Obavijesti su opcionalne i upravljaju se kao zasebni profili obavijesti.
+U **Options → Notifications** možete vidjeti postojeće profile, dodati
+novi profil, urediti postojeći ili ga obrisati.
 
-Mogu se konfigurirati:
+OGP podržava dvije vrste profila obavijesti.
 
--   uključivanje/isključivanje obavijesti;
--   Home Assistant notification odredišta;
--   Browser Mod popup odredišta;
--   kategorije obavijesti;
--   jezik obavijesti.
+#### Globalna obavijest
+
+Može postojati samo jedna Globalna obavijest. Kod kreiranja ili uređivanja
+odabire se:
+
+-   **Status mreže**;
+-   **Zaštita / Override**;
+-   **Sigurnost**;
+-   jezik obavijesti (**Hrvatski** ili **English**).
+
+Globalna obavijest uvijek koristi ugrađenu Home Assistant uslugu
+`persistent_notification`. Ne koristi Browser Mod i ne zahtijeva odabir
+notification odredišta.
+
+#### Obavijest prema uređaju
+
+Može postojati više obavijesti prema uređaju. Svaki profil ima vlastito
+odredište, odabir događaja i jezik. Vrsta odredišta može biti:
+
+-   **Notify** --- jedno Home Assistant notification odredište;
+-   **Browser Mod** --- jedan Browser Mod uređaj.
+
+Za svaki profil zasebno mogu se odabrati Status mreže, Zaštita / Override
+i Sigurnost te Hrvatski ili English jezik.
+
+Lista obavijesti služi za neovisno upravljanje profilima. Uređivanje\ mijenja samo odabrani profil. Brisanje profila uklanja njegovu generiranu
+automatizaciju. Ako Globalna obavijest već postoji, pri dodavanju nove
+obavijesti Globalna opcija više nije ponuđena.
 
 Postavke obavijesti spremaju se odvojeno i ostaju sačuvane kroz promjene
 centralne konfiguracije i restart Home Assistanta.

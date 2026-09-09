@@ -114,11 +114,24 @@ kada se stvarni uređaji žele potpuno izuzeti iz OGP upravljanja.
 
 ## Obavijesti
 
-Obavijesti su opcionalne i mogu prijavljivati stanje mreže,
-zaštitu/Override, sigurnosne događaje i važne sigurnosne uvjete.
+Obavijesti su opcionalne i upravljaju se kao zasebni profili obavijesti.
+Svaki profil može se zasebno uređivati ili obrisati.
 
-Jezik obavijesti sprema se u OGP postavkama obavijesti i podržava
-hrvatski i engleski.
+OGP podržava dvije vrste profila obavijesti:
+
+-   **Globalna obavijest** --- može postojati najviše jedan globalni
+    profil. Uvijek koristi ugrađenu Home Assistant uslugu
+    `persistent_notification`. Korisnik odabire proizvoljnu kombinaciju
+    događaja Status mreže, Zaštita / Override i Sigurnost te jezik
+    obavijesti.
+-   **Obavijest prema uređaju** --- može se kreirati više profila. Svaki
+    profil cilja jedno Home Assistant notification odredište ili jedan
+    Browser Mod uređaj te ima vlastiti odabir događaja i jezika.
+
+Browser Mod dostupan je samo za obavijesti prema uređaju. Globalna
+obavijest ga ne koristi.
+
+Jezik obavijesti podržava hrvatski i engleski.
 
 OGP sprječava lažne početne obavijesti o promjeni mrežnog stanja kada
 Home Assistant nakon restarta prijeđe iz početnog
@@ -168,17 +181,19 @@ niti distribuira izvorni kod Huawei Solar integracije.
 
 ## Dokumentacija
 
--   `README.md` --- pregled projekta
--   `README_hr.md` --- hrvatski pregled
--   `CONFIGURATION.md` --- detaljna konfiguracija
--   `CONFIGURATION_hr.md` --- detaljne hrvatske upute
+-   [`README.md`](README.md) --- pregled projekta
+-   [`README_hr.md`](README_hr.md) --- hrvatski pregled
+-   [`CONFIGURATION.md`](CONFIGURATION.md) --- detaljna konfiguracija
+-   [`CONFIGURATION_hr.md`](CONFIGURATION_hr.md) --- detaljne hrvatske upute
 
 ## Verzija
 
-**v1.1.4 --- Stable**
+**v1.2.0 --- Stable**
 
-v1.1.4 sadrži testirane bugfix izmjene i generičku Custom Device
-Control/Recovery funkcionalnost.
+v1.2.0 dodaje zasebne profile obavijesti s Globalnom i obavijesti prema
+uređaju, uključujući zasebna Notify i Browser Mod odredišta, odabir
+događaja, izbor jezika te upravljanje profilima obavijesti (dodavanje,
+uređivanje i brisanje).
 
 ## Odricanje od odgovornosti
 

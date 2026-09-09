@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Off-grid Protection",
-        "description": "Configure Off-grid Protection.",
+        "description": "Configure Off-grid Protection.\n\n### 📚 Documentation\n\n[📖 Configuration (English)](https://github.com/imehun/off-grid-protection/blob/main/CONFIGURATION.md)\n\n[📚 Konfiguracija (Hrvatski)](https://github.com/imehun/off-grid-protection/blob/main/CONFIGURATION_hr.md)\n\n[🐙 GitHub repository](https://github.com/imehun/off-grid-protection)",
         "data": {
           "name": "Name"
         }
@@ -134,7 +134,8 @@
           "send_popup": "Show Browser Mod popup",
           "notify_grid_status": "Notify grid status",
           "notify_protection_status": "Notify protection and Override status",
-          "notify_security": "Notify security events"
+          "notify_security": "Notify security events",
+          "notification_mode": "Notification mode"
         },
         "data_description": {
           "notify_targets": "Select one or more available notify recipients.",
@@ -144,13 +145,40 @@
           "send_popup": "Show a Browser Mod popup on the selected devices when the house operating mode changes.",
           "notify_grid_status": "Send notifications when the house changes between grid and battery operation.",
           "notify_protection_status": "Send notifications when a device is locked or an Override starts or ends.",
-          "notify_security": "Send notifications for rejected Override attempts caused by an invalid PIN."
+          "notify_security": "Send notifications for rejected Override attempts caused by an invalid PIN.",
+          "notification_mode": "Choose one global notification configuration or configure notifications separately for each notify recipient and Browser Mod device."
         }
+      },
+      "custom_notification_targets": {
+        "title": "Notification targets",
+        "description": "Select the notify recipients and Browser Mod devices that should receive OGP notifications.",
+        "data": {
+          "notify_targets": "Notify recipients",
+          "browser_mod_targets": "Browser Mod devices",
+          "notification_language": "Notification language"
+        },
+        "data_description": {
+          "notify_targets": "Select the Home Assistant notify recipients available for OGP notifications.",
+          "browser_mod_targets": "Select the Browser Mod devices available for OGP popups.",
+          "notification_language": "Language of the generated OGP automation and messages."
+        }
+      },
+      "custom_notification_preferences": {
+        "title": "Per-device notification settings",
+        "description": "Select which notification events each selected recipient or Browser Mod device should receive.",
+        "data_description": {}
       }
     },
     "abort": {
       "device_added": "**Device added**\n\nThe device was successfully added to Off-grid Protection. Generated OGP entities and Lovelace instructions are ready.",
       "generation_cancelled": "**Generation cancelled**\n\nLovelace YAML generation was cancelled."
+    },
+    "error": {
+      "notification_type_required": "Select at least one notification type.",
+      "notify_target_required": "Select at least one notify recipient.",
+      "browser_mod_target_required": "Select at least one Browser Mod device.",
+      "custom_target_required": "Select at least one notify recipient or Browser Mod device.",
+      "custom_event_required": "Select at least one notification event."
     }
   },
   "options": {
@@ -246,6 +274,64 @@
         "data": {
           "lovelace_language": "Lovelace YAML language"
         }
+      },
+      "notification_list": {
+        "title": "Notifications",
+        "description": "Select an existing notification to edit or manage it, or add a new one.",
+        "data": {
+          "notification_selection": "Notification"
+        }
+      },
+      "notification_add": {
+        "title": "Add notification",
+        "description": "Select the type of the new notification.",
+        "data": {
+          "notification_mode": "Notification type"
+        }
+      },
+      "notification_global": {
+        "title": "Global notification",
+        "description": "Configure the global notification.",
+        "data": {
+          "send_notification": "Send notification",
+          "send_popup": "Show Browser Mod popup",
+          "notify_targets": "Notification recipients",
+          "browser_mod_targets": "Browser Mod devices",
+          "notify_grid_status": "Notify grid status",
+          "notify_protection_status": "Notify protection and Override status",
+          "notify_security": "Notify security events",
+          "notification_language": "Notification language"
+        }
+      },
+      "notification_device": {
+        "title": "Per-device notification",
+        "description": "Select the target type.",
+        "data": {
+          "target_type": "Target type"
+        }
+      },
+      "notification_device_target": {
+        "title": "Per-device notification",
+        "description": "Select one device or recipient and the events it should receive.",
+        "data": {
+          "target": "Device / recipient",
+          "events": "Events",
+          "notification_language": "Notification language"
+        }
+      },
+      "notification_action": {
+        "title": "Notification",
+        "description": "Choose what to do with this notification.",
+        "data": {
+          "notification_action": "Action"
+        }
+      },
+      "notification_delete": {
+        "title": "Delete notification",
+        "description": "Confirm that you want to delete this notification and its generated automation.",
+        "data": {
+          "confirm_delete": "Delete this notification"
+        }
       }
     },
     "abort": {}
@@ -300,6 +386,31 @@
       "options": {
         "stay_off": "Stay OFF",
         "turn_on": "Turn ON"
+      }
+    },
+    "notification_mode": {
+      "options": {
+        "global": "Global notification",
+        "custom": "Per-device notifications"
+      }
+    },
+    "notification_target_type": {
+      "options": {
+        "notify": "Notify",
+        "popup": "Browser Mod"
+      }
+    },
+    "notification_events": {
+      "options": {
+        "grid": "Grid status",
+        "protection": "Protection / Override",
+        "security": "Security"
+      }
+    },
+    "notification_action": {
+      "options": {
+        "edit": "Edit notification",
+        "delete": "Delete notification"
       }
     }
   },

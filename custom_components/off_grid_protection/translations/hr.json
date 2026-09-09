@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "OGP – Off-grid Protection",
-        "description": "Konfigurirajte OGP – Off-grid Protection.",
+        "description": "Konfigurirajte OGP – Off-grid Protection.\n\n### 📚 Dokumentacija\n\n[📖 Konfiguracija (English)](https://github.com/imehun/off-grid-protection/blob/main/CONFIGURATION.md)\n\n[📚 Konfiguracija (Hrvatski)](https://github.com/imehun/off-grid-protection/blob/main/CONFIGURATION_hr.md)\n\n[🐙 GitHub repozitorij](https://github.com/imehun/off-grid-protection)",
         "data": {
           "name": "Naziv"
         }
@@ -134,7 +134,8 @@
           "send_popup": "Prikaži Browser Mod popup",
           "notify_grid_status": "Obavijesti o statusu mreže",
           "notify_protection_status": "Obavijesti o zaštiti i Override statusu",
-          "notify_security": "Obavijesti o sigurnosnim događajima"
+          "notify_security": "Obavijesti o sigurnosnim događajima",
+          "notification_mode": "Način obavijesti"
         },
         "data_description": {
           "notify_targets": "Odaberite jedan ili više dostupnih notify primatelja.",
@@ -144,13 +145,40 @@
           "send_popup": "Prikaži Browser Mod popup na odabranim uređajima pri promjeni režima rada kuće.",
           "notify_grid_status": "Šalji obavijesti kada kuća promijeni rad između mreže i baterije.",
           "notify_protection_status": "Šalji obavijesti kada se uređaj zaključa ili Override započne ili završi.",
-          "notify_security": "Šalji obavijesti za odbijene pokušaje Overridea zbog neispravnog PIN-a."
+          "notify_security": "Šalji obavijesti za odbijene pokušaje Overridea zbog neispravnog PIN-a.",
+          "notification_mode": "Odaberite globalnu konfiguraciju obavijesti ili prilagodite obavijesti zasebno za svaki notify primatelj i Browser Mod uređaj."
         }
+      },
+      "custom_notification_targets": {
+        "title": "Primatelji obavijesti",
+        "description": "Odaberite notify primatelje i Browser Mod uređaje koji trebaju primati OGP obavijesti.",
+        "data": {
+          "notify_targets": "Notify primatelji",
+          "browser_mod_targets": "Browser Mod uređaji",
+          "notification_language": "Jezik obavijesti"
+        },
+        "data_description": {
+          "notify_targets": "Odaberite dostupne Home Assistant notify primatelje za OGP obavijesti.",
+          "browser_mod_targets": "Odaberite dostupne Browser Mod uređaje za OGP popupove.",
+          "notification_language": "Jezik generirane OGP automatizacije i poruka."
+        }
+      },
+      "custom_notification_preferences": {
+        "title": "Prilagođene postavke obavijesti",
+        "description": "Odaberite koje događaje obavijesti treba primati svaki odabrani primatelj ili Browser Mod uređaj.",
+        "data_description": {}
       }
     },
     "abort": {
       "device_added": "**Uređaj dodan**\n\nUređaj je uspješno dodan u OGP – Off-grid Protection. Generirani OGP entityji i Lovelace upute su spremni.",
       "generation_cancelled": "**Generiranje otkazano**\n\nGeneriranje Lovelace YAML-a je otkazano."
+    },
+    "error": {
+      "notification_type_required": "Odaberite barem jedan način obavijesti.",
+      "notify_target_required": "Odaberite barem jednog notify primatelja.",
+      "browser_mod_target_required": "Odaberite barem jedan Browser Mod uređaj.",
+      "custom_target_required": "Odaberite barem jednog notify primatelja ili Browser Mod uređaj.",
+      "custom_event_required": "Odaberite barem jedan događaj obavijesti."
     }
   },
   "options": {
@@ -246,6 +274,64 @@
         "data": {
           "lovelace_language": "Jezik Lovelace YAML-a"
         }
+      },
+      "notification_list": {
+        "title": "Obavijesti",
+        "description": "Odaberite postojeću obavijest za uređivanje ili brisanje, ili dodajte novu.",
+        "data": {
+          "notification_selection": "Obavijest"
+        }
+      },
+      "notification_add": {
+        "title": "Dodaj obavijest",
+        "description": "Odaberite vrstu nove obavijesti.",
+        "data": {
+          "notification_mode": "Vrsta obavijesti"
+        }
+      },
+      "notification_global": {
+        "title": "Globalna obavijest",
+        "description": "Postavke globalne obavijesti.",
+        "data": {
+          "send_notification": "Pošalji obavijest",
+          "send_popup": "Prikaži Browser Mod popup",
+          "notify_targets": "Primatelji obavijesti",
+          "browser_mod_targets": "Browser Mod uređaji",
+          "notify_grid_status": "Obavijesti o statusu mreže",
+          "notify_protection_status": "Obavijesti o zaštiti i Override statusu",
+          "notify_security": "Obavijesti o sigurnosnim događajima",
+          "notification_language": "Jezik obavijesti"
+        }
+      },
+      "notification_device": {
+        "title": "Obavijest prema uređaju",
+        "description": "Odaberite vrstu cilja.",
+        "data": {
+          "target_type": "Vrsta cilja"
+        }
+      },
+      "notification_device_target": {
+        "title": "Obavijest prema uređaju",
+        "description": "Odaberite jedan uređaj ili primatelja i događaje koje treba slati.",
+        "data": {
+          "target": "Uređaj / primatelj",
+          "events": "Događaji",
+          "notification_language": "Jezik obavijesti"
+        }
+      },
+      "notification_action": {
+        "title": "Obavijest",
+        "description": "Odaberite što želite napraviti s ovom obavijesti.",
+        "data": {
+          "notification_action": "Radnja"
+        }
+      },
+      "notification_delete": {
+        "title": "Brisanje obavijesti",
+        "description": "Potvrdite da želite obrisati ovu obavijest i pripadajuću generiranu automatizaciju.",
+        "data": {
+          "confirm_delete": "Obriši ovu obavijest"
+        }
       }
     },
     "abort": {}
@@ -300,6 +386,31 @@
       "options": {
         "stay_off": "Ostavi ISKLJUČENO",
         "turn_on": "Uključi"
+      }
+    },
+    "notification_mode": {
+      "options": {
+        "global": "Globalna obavijest",
+        "custom": "Obavijesti prema uređaju"
+      }
+    },
+    "notification_target_type": {
+      "options": {
+        "notify": "Notify",
+        "popup": "Browser Mod"
+      }
+    },
+    "notification_events": {
+      "options": {
+        "grid": "Status mreže",
+        "protection": "Zaštita / Override",
+        "security": "Sigurnost"
+      }
+    },
+    "notification_action": {
+      "options": {
+        "edit": "Uredi obavijest",
+        "delete": "Obriši obavijest"
       }
     }
   },

@@ -114,12 +114,23 @@ real devices should be left completely outside OGP control.
 
 ## Notifications
 
-Notifications are optional and can report grid status,
-protection/Override events, security events and important safety
-conditions.
+Notifications are optional and are managed as separate notification
+profiles. Each profile can be edited or deleted independently.
 
-The notification language is stored as part of OGP notification settings
-and supports English and Croatian.
+OGP supports two notification profile types:
+
+-   **Global notification** --- one global profile can exist. It always
+    uses the built-in Home Assistant `persistent_notification` service.
+    The user selects any combination of Grid status, Protection / Override
+    and Security events, and selects the notification language.
+-   **Per-device notification** --- multiple profiles can be created.
+    Each profile targets one Home Assistant notification target or one
+    Browser Mod device and can have its own event selection and language.
+
+Browser Mod is available only for Per-device notifications. It is not used
+by the Global notification profile.
+
+The notification language supports English and Croatian.
 
 OGP suppresses false startup grid notifications caused by an initial
 `unavailable`/`unknown` state transitioning to a valid grid state after
@@ -168,17 +179,19 @@ or distribute Huawei Solar source code.
 
 ## Documentation
 
--   `README.md` --- Project overview
--   `README_hr.md` --- Croatian overview
--   `CONFIGURATION.md` --- Detailed configuration
--   `CONFIGURATION_hr.md` --- Detailed Croatian configuration
+-   [`README.md`](README.md) --- Project overview
+-   [`README_hr.md`](README_hr.md) --- Croatian overview
+-   [`CONFIGURATION.md`](CONFIGURATION.md) --- Detailed configuration
+-   [`CONFIGURATION_hr.md`](CONFIGURATION_hr.md) --- Detailed Croatian configuration
 
 ## Version
 
-**v1.1.4 --- Stable**
+**v1.2.0 --- Stable**
 
-v1.1.4 contains tested bug fixes and the generic Custom Device
-control/recovery functionality.
+v1.2.0 adds independent notification profiles with Global and
+Per-device configuration, including per-device Notify and Browser Mod
+targets, separate event selection, notification language selection, and
+notification profile management (add, edit and delete).
 
 ## Disclaimer
 

@@ -240,14 +240,48 @@ def _build_automation(
     notify_targets: list[str],
     browser_mod_targets: list[str],
     texts: dict[str, str],
+    notification_mode: str = "global",
+    custom_targets: dict[str, dict[str, list[str]]] | None = None,
 ) -> dict[str, Any]:
     """Build the central OGP notification automation."""
 
     def text(key: str) -> str:
         return texts.get(key, key)
 
-    def notify_actions(title: str, message: str) -> list[dict[str, Any]]:
+    def notify_actions(
+        title: str,
+        message: str,
+        event_type: str,
+    ) -> list[dict[str, Any]]:
         actions: list[dict[str, Any]] = []
+
+        if notification_mode == "custom":
+            custom = custom_targets or {}
+            for target, events in custom.get("notify", {}).items():
+                if event_type in events:
+                    actions.append(
+                        _notify_action(
+                            target,
+                            title,
+                            message,
+                        )
+                    )
+
+            popup_devices = [
+                target
+                for target, events in custom.get("popup", {}).items()
+                if event_type in events
+            ]
+            if popup_devices:
+                actions.append(
+                    _popup_action(
+                        popup_devices,
+                        title,
+                        message,
+                    )
+                )
+
+            return actions
 
         effective_notification_types = set(
             notification_types
@@ -359,6 +393,7 @@ def _build_automation(
                 "sequence": notify_actions(
                     text("grid_off_title"),
                     text("grid_off_message"),
+                    "grid",
                 ),
             },
             {
@@ -380,6 +415,7 @@ def _build_automation(
                 "sequence": notify_actions(
                     text("grid_on_title"),
                     text("grid_on_message"),
+                    "grid",
                 ),
             },
         ])
@@ -391,6 +427,7 @@ def _build_automation(
                 "sequence": notify_actions(
                     text("override_title"),
                     text("override_message"),
+                    "protection",
                 ),
             },
             {
@@ -398,6 +435,7 @@ def _build_automation(
                 "sequence": notify_actions(
                     text("override_expired_title"),
                     text("override_expired_message"),
+                    "protection",
                 ),
             },
             {
@@ -405,6 +443,7 @@ def _build_automation(
                 "sequence": notify_actions(
                     text("override_grid_return_title"),
                     text("override_grid_return_message"),
+                    "protection",
                 ),
             },
             {
@@ -412,6 +451,7 @@ def _build_automation(
                 "sequence": notify_actions(
                     text("locked_title"),
                     text("locked_message"),
+                    "protection",
                 ),
             },
             {
@@ -419,6 +459,7 @@ def _build_automation(
                 "sequence": notify_actions(
                     text("shutdown_failed_title"),
                     text("shutdown_failed_message"),
+                    "protection",
                 ),
             },
             {
@@ -434,6 +475,7 @@ def _build_automation(
                 "sequence": notify_actions(
                     text("recovery_title"),
                     text("recovery_message"),
+                    "protection",
                 ),
             },
         ])
@@ -452,6 +494,7 @@ def _build_automation(
             "sequence": notify_actions(
                 text("invalid_pin_title"),
                 text("invalid_pin_message"),
+                "security",
             ),
         })
 
@@ -492,6 +535,8 @@ async def async_generate_house_status_automation(
     notify_targets: list[str],
     browser_mod_targets: list[str],
     language: str,
+    notification_mode: str = "global",
+    custom_targets: dict[str, dict[str, list[str]]] | None = None,
 ) -> str:
     """Create or replace the OGP central notification automation."""
     texts = await _load_notification_texts(
@@ -507,6 +552,8 @@ async def async_generate_house_status_automation(
         notify_targets=notify_targets,
         browser_mod_targets=browser_mod_targets,
         texts=texts,
+        notification_mode=notification_mode,
+        custom_targets=custom_targets,
     )
 
     path = _automation_file(hass)

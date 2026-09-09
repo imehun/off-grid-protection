@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from uuid import uuid4
+from typing import Any
 
 import voluptuous as vol
 
@@ -22,6 +23,7 @@ from .notifications import (
     async_generate_house_status_automation,
     async_remove_house_status_automation,
     get_notify_options,
+    get_browser_mod_device_options,
     _load_notification_texts,
 )
 
@@ -278,6 +280,13 @@ class OffGridProtectionConfigFlow(
             language=notification_config[
                 "language"
             ],
+            notification_mode=notification_config.get(
+                "notification_mode",
+                "global",
+            ),
+            custom_targets=notification_config.get(
+                "custom_targets",
+            ),
         )
 
         central_config["generated_resources"] = {
@@ -387,6 +396,249 @@ class OffGridProtectionConfigFlow(
             data_schema=schema,
         )
 
+
+    async def async_step_custom_notification_targets(
+        self,
+        user_input=None,
+        current=None,
+    ):
+        """Select notification targets for per-device notification mode."""
+        current = current or getattr(self, "_current_notification_config", {})
+
+        if user_input is not None:
+            self._custom_notify_targets = list(
+                user_input.get("notify_targets", [])
+            )
+            self._custom_browser_mod_targets = list(
+                user_input.get("browser_mod_targets", [])
+            )
+
+            if not self._custom_notify_targets and not self._custom_browser_mod_targets:
+                return self.async_show_form(
+                    step_id="custom_notification_targets",
+                    data_schema=self._custom_notification_targets_schema(
+                        current,
+                        user_input,
+                    ),
+                    errors={"base": "custom_target_required"},
+                )
+
+            self._custom_notification_language = user_input.get(
+                "notification_language",
+                current.get("language", "en"),
+            )
+            return await self.async_step_custom_notification_preferences(
+                current=current,
+            )
+
+        return self.async_show_form(
+            step_id="custom_notification_targets",
+            data_schema=self._custom_notification_targets_schema(current),
+        )
+
+    def _custom_notification_targets_schema(
+        self,
+        current=None,
+        submitted=None,
+    ):
+        """Build the target selector for per-device notification mode."""
+        current = current or {}
+        submitted = submitted or {}
+        custom = current.get("custom_targets", {})
+
+        notify_default = submitted.get(
+            "notify_targets",
+            list(custom.get("notify", {}).keys())
+            or current.get("notify_targets", []),
+        )
+        popup_default = submitted.get(
+            "browser_mod_targets",
+            list(custom.get("popup", {}).keys())
+            or current.get("browser_mod_targets", []),
+        )
+
+        return vol.Schema(
+            {
+                vol.Optional(
+                    "notify_targets",
+                    default=notify_default,
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=get_notify_options(self.hass),
+                        multiple=True,
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                    )
+                ),
+                vol.Optional(
+                    "browser_mod_targets",
+                    default=popup_default,
+                ): selector.DeviceSelector(
+                    selector.DeviceSelectorConfig(
+                        integration="browser_mod",
+                        multiple=True,
+                    )
+                ),
+                vol.Required(
+                    "notification_language",
+                    default=submitted.get(
+                        "notification_language",
+                        current.get("language", "en"),
+                    ),
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=[
+                            {"value": "en", "label": "English"},
+                            {"value": "hr", "label": "Hrvatski"},
+                        ],
+                        mode=selector.SelectSelectorMode.DROPDOWN,
+                    )
+                ),
+            }
+        )
+
+    async def async_step_custom_notification_preferences(
+        self,
+        user_input=None,
+        current=None,
+    ):
+        """Configure notification events independently for each target."""
+        current = current or getattr(self, "_current_notification_config", {})
+
+        notify_targets = list(
+            getattr(self, "_custom_notify_targets", [])
+        )
+        browser_targets = list(
+            getattr(self, "_custom_browser_mod_targets", [])
+        )
+
+        # Build a stable mapping from form field names to target IDs.
+        target_fields: dict[str, tuple[str, str]] = {}
+        fields: dict = {}
+        language = getattr(
+            self,
+            "_custom_notification_language",
+            current.get("language", "en"),
+        )
+        event_options = [
+            {
+                "value": "grid",
+                "label": "Status mreže" if language == "hr" else "Grid status",
+            },
+            {
+                "value": "protection",
+                "label": "Zaštita / Override" if language == "hr" else "Protection / Override",
+            },
+            {
+                "value": "security",
+                "label": "Sigurnost" if language == "hr" else "Security",
+            },
+        ]
+
+        old_custom = current.get("custom_targets", {})
+        old_notify = old_custom.get("notify", {})
+        old_popup = old_custom.get("popup", {})
+
+        for index, target in enumerate(notify_targets):
+            options = get_notify_options(self.hass)
+            label = next(
+                (
+                    item["label"]
+                    for item in options
+                    if item["value"] == target
+                ),
+                target,
+            )
+            field = f"📱 {label}"
+            target_fields[field] = ("notify", target)
+            fields[
+                vol.Required(
+                    field,
+                    default=list(old_notify.get(target, ["grid", "protection", "security"])),
+                )
+            ] = selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=event_options,
+                    multiple=True,
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            )
+
+        browser_options = get_browser_mod_device_options(self.hass)
+        for index, target in enumerate(browser_targets):
+            label = next(
+                (
+                    item["label"]
+                    for item in browser_options
+                    if item["value"] == target
+                ),
+                target,
+            )
+            field = f"🖥️ {label}"
+            target_fields[field] = ("popup", target)
+            fields[
+                vol.Required(
+                    field,
+                    default=list(old_popup.get(target, ["grid", "protection", "security"])),
+                )
+            ] = selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=event_options,
+                    multiple=True,
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            )
+
+        self._custom_target_fields = target_fields
+        schema = vol.Schema(fields)
+
+        if user_input is not None:
+            custom_targets = {"notify": {}, "popup": {}}
+            selected_events: set[str] = set()
+
+            for field, (target_type, target) in target_fields.items():
+                events = list(user_input.get(field, []))
+                custom_targets[target_type][target] = events
+                selected_events.update(events)
+
+            if not selected_events:
+                return self.async_show_form(
+                    step_id="custom_notification_preferences",
+                    data_schema=schema,
+                    errors={"base": "custom_event_required"},
+                )
+
+            language = getattr(
+                self,
+                "_custom_notification_language",
+                current.get("language", "en"),
+            )
+
+            notification_config = {
+                "enabled": True,
+                "notification_mode": "custom",
+                "notification_types": [
+                    target_type
+                    for target_type, values in custom_targets.items()
+                    if values
+                ],
+                "notification_events": sorted(selected_events),
+                "notify_targets": notify_targets,
+                "browser_mod_targets": browser_targets,
+                "custom_targets": custom_targets,
+                "language": language,
+            }
+
+            return await self._async_finalize_central_notifications(
+                self._central_config,
+                notification_config,
+            )
+
+        return self.async_show_form(
+            step_id="custom_notification_preferences",
+            data_schema=schema,
+        )
+
+
     async def async_step_central_notifications(
         self,
         user_input=None,
@@ -394,16 +646,23 @@ class OffGridProtectionConfigFlow(
         """Configure central house-status notifications."""
 
         if user_input is not None:
+            mode = user_input.get("notification_mode", "global")
+            if mode == "custom":
+                self._current_notification_config = dict(
+                    getattr(self, "_current_notification_config", {})
+                )
+                self._current_notification_config.update(user_input)
+                self._custom_notification_language = user_input.get(
+                    "notification_language", "en"
+                )
+                return await self.async_step_custom_notification_targets(
+                    current=self._current_notification_config,
+                )
+
             notification_types = []
-            if user_input.get(
-                "send_notification",
-                False,
-            ):
+            if user_input.get("send_notification", False):
                 notification_types.append("notify")
-            if user_input.get(
-                "send_popup",
-                False,
-            ):
+            if user_input.get("send_popup", False):
                 notification_types.append("popup")
             notification_events = []
             if user_input.get("notify_grid_status", True):
@@ -413,68 +672,36 @@ class OffGridProtectionConfigFlow(
             if user_input.get("notify_security", True):
                 notification_events.append("security")
 
-            notify_targets = list(
-                user_input.get(
-                    "notify_targets",
-                    [],
-                )
-            )
-            browser_mod_targets = list(
-                user_input.get(
-                    "browser_mod_targets",
-                    [],
-                )
-            )
+            notify_targets = list(user_input.get("notify_targets", []))
+            browser_mod_targets = list(user_input.get("browser_mod_targets", []))
 
             if not notification_types:
                 return self.async_show_form(
                     step_id="central_notifications",
-                    data_schema=self._central_notifications_schema(
-                        user_input
-                    ),
-                    errors={
-                        "base": "notification_type_required",
-                    },
+                    data_schema=self._central_notifications_schema(user_input),
+                    errors={"base": "notification_type_required"},
                 )
-
-            if (
-                "notify" in notification_types
-                and not notify_targets
-            ):
+            if "notify" in notification_types and not notify_targets:
                 return self.async_show_form(
                     step_id="central_notifications",
-                    data_schema=self._central_notifications_schema(
-                        user_input
-                    ),
-                    errors={
-                        "base": "notify_target_required",
-                    },
+                    data_schema=self._central_notifications_schema(user_input),
+                    errors={"base": "notify_target_required"},
                 )
-
-            if (
-                "popup" in notification_types
-                and not browser_mod_targets
-            ):
+            if "popup" in notification_types and not browser_mod_targets:
                 return self.async_show_form(
                     step_id="central_notifications",
-                    data_schema=self._central_notifications_schema(
-                        user_input
-                    ),
-                    errors={
-                        "base": "browser_mod_target_required",
-                    },
+                    data_schema=self._central_notifications_schema(user_input),
+                    errors={"base": "browser_mod_target_required"},
                 )
 
             notification_config = {
                 "enabled": True,
+                "notification_mode": "global",
                 "notification_types": notification_types,
                 "notification_events": notification_events,
                 "notify_targets": notify_targets,
                 "browser_mod_targets": browser_mod_targets,
-                "language": user_input.get(
-                    "notification_language",
-                    "en",
-                ),
+                "language": user_input.get("notification_language", "en"),
             }
 
             return await self._async_finalize_central_notifications(
@@ -482,9 +709,10 @@ class OffGridProtectionConfigFlow(
                 notification_config,
             )
 
+        current = getattr(self, "_current_notification_config", {})
         return self.async_show_form(
             step_id="central_notifications",
-            data_schema=self._central_notifications_schema(),
+            data_schema=self._central_notifications_schema(current),
         )
 
     def _central_notifications_schema(
@@ -493,52 +721,45 @@ class OffGridProtectionConfigFlow(
     ):
         """Build the central notification selector schema."""
         current = current or {}
-
         return vol.Schema(
             {
+                vol.Required(
+                    "notification_mode",
+                    default=current.get("notification_mode", "global"),
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=["global", "custom"],
+                        mode=selector.SelectSelectorMode.LIST,
+                        translation_key="notification_mode",
+                    )
+                ),
                 vol.Required(
                     "send_notification",
                     default=current.get(
                         "send_notification",
-                        "notify"
-                        in current.get(
-                            "notification_types",
-                            ["notify"],
-                        ),
+                        "notify" in current.get("notification_types", ["notify"]),
                     ),
                 ): bool,
                 vol.Required(
                     "send_popup",
                     default=current.get(
                         "send_popup",
-                        "popup"
-                        in current.get(
-                            "notification_types",
-                            [],
-                        ),
+                        "popup" in current.get("notification_types", []),
                     ),
                 ): bool,
                 vol.Optional(
                     "notify_targets",
-                    default=current.get(
-                        "notify_targets",
-                        [],
-                    ),
+                    default=current.get("notify_targets", []),
                 ): selector.SelectSelector(
                     selector.SelectSelectorConfig(
-                        options=get_notify_options(
-                            self.hass
-                        ),
+                        options=get_notify_options(self.hass),
                         multiple=True,
                         mode=selector.SelectSelectorMode.DROPDOWN,
                     )
                 ),
                 vol.Optional(
                     "browser_mod_targets",
-                    default=current.get(
-                        "browser_mod_targets",
-                        [],
-                    ),
+                    default=current.get("browser_mod_targets", []),
                 ): selector.DeviceSelector(
                     selector.DeviceSelectorConfig(
                         integration="browser_mod",
@@ -547,54 +768,40 @@ class OffGridProtectionConfigFlow(
                 ),
                 vol.Required(
                     "notify_grid_status",
-                    default=(
-                        "grid" in current.get(
-                            "notification_events",
-                            ["grid", "protection", "security"],
-                        )
+                    default="grid" in current.get(
+                        "notification_events",
+                        ["grid", "protection", "security"],
                     ),
                 ): bool,
                 vol.Required(
                     "notify_protection_status",
-                    default=(
-                        "protection" in current.get(
-                            "notification_events",
-                            ["grid", "protection", "security"],
-                        )
+                    default="protection" in current.get(
+                        "notification_events",
+                        ["grid", "protection", "security"],
                     ),
                 ): bool,
                 vol.Required(
                     "notify_security",
-                    default=(
-                        "security" in current.get(
-                            "notification_events",
-                            ["grid", "protection", "security"],
-                        )
+                    default="security" in current.get(
+                        "notification_events",
+                        ["grid", "protection", "security"],
                     ),
                 ): bool,
                 vol.Required(
                     "notification_language",
-                    default=current.get(
-                        "language",
-                        "en",
-                    ),
+                    default=current.get("language", "en"),
                 ): selector.SelectSelector(
                     selector.SelectSelectorConfig(
                         options=[
-                            {
-                                "value": "en",
-                                "label": "English",
-                            },
-                            {
-                                "value": "hr",
-                                "label": "Hrvatski",
-                            },
+                            {"value": "en", "label": "English"},
+                            {"value": "hr", "label": "Hrvatski"},
                         ],
                         mode=selector.SelectSelectorMode.DROPDOWN,
                     )
                 ),
             }
         )
+
 
     async def async_step_climate(
         self,
@@ -1215,646 +1422,596 @@ class OffGridProtectionOptionsFlow(
             data_schema=schema,
         )
 
-    async def async_step_init(
-        self,
-        user_input=None,
-    ):
-        """Select what should be configured."""
+    def _get_notification_profiles(self, notifications: dict | None = None) -> list[dict]:
+        """Return notification profiles, migrating the old single profile format."""
+        notifications = notifications or self.config_entry.data.get("central", {}).get("notifications", {})
+        profiles = notifications.get("profiles")
+        if isinstance(profiles, list):
+            return [dict(profile) for profile in profiles if isinstance(profile, dict)]
 
+        # V1.1.5 / early V1.2 format: one notification configuration.
+        if not notifications or not notifications.get("enabled", False):
+            return []
+
+        mode = notifications.get("notification_mode", "global")
+        if mode == "custom":
+            custom = notifications.get("custom_targets", {})
+            migrated: list[dict] = []
+            for target_type, targets in (("notify", custom.get("notify", {})), ("popup", custom.get("popup", {}))):
+                for target, events in targets.items():
+                    migrated.append({
+                        "id": uuid4().hex,
+                        "mode": "custom",
+                        "target_type": target_type,
+                        "target": target,
+                        "events": list(events),
+                        "language": notifications.get("language", "en"),
+                        "automation_id": f"{AUTOMATION_ID_PREFIX}_{uuid4().hex[:12]}",
+                    })
+            return migrated
+
+        return [{
+            "id": uuid4().hex,
+            "mode": "global",
+            "notification_types": list(notifications.get("notification_types", [])),
+            "notification_events": list(notifications.get("notification_events", [])),
+            "notify_targets": list(notifications.get("notify_targets", [])),
+            "browser_mod_targets": list(notifications.get("browser_mod_targets", [])),
+            "language": notifications.get("language", "en"),
+            "automation_id": notifications.get("automation_id") or f"{AUTOMATION_ID_PREFIX}_{uuid4().hex[:12]}",
+        }]
+
+    def _notification_label(self, profile: dict) -> str:
+        """Return a readable label for a notification profile."""
+        if profile.get("mode") == "global":
+            label = "Globalna obavijest" if profile.get("language") == "hr" else "Global notification"
+            prefix = "🌐 "
+        else:
+            target_type = profile.get("target_type")
+            target = profile.get("target", "")
+            if target_type == "notify":
+                label = next(
+                    (item["label"] for item in get_notify_options(self.hass) if item["value"] == target),
+                    target,
+                )
+                prefix = "📱 "
+            else:
+                label = next(
+                    (item["label"] for item in get_browser_mod_device_options(self.hass) if item["value"] == target),
+                    target,
+                )
+                prefix = "🖥️ "
+
+        events = self._notification_event_labels(profile)
+        return f"{prefix}{label}" + (f" — {events}" if events else "")
+
+    def _notification_event_labels(self, profile: dict) -> str:
+        """Return the selected event names for the list."""
+        language = profile.get("language", "en")
+        labels = {
+            "grid": "Status mreže" if language == "hr" else "Grid status",
+            "protection": "Zaštita / Override" if language == "hr" else "Protection / Override",
+            "security": "Sigurnost" if language == "hr" else "Security",
+        }
+        return " · ".join(labels[event] for event in profile.get("notification_events", profile.get("events", [])) if event in labels)
+
+    async def async_step_init(self, user_input=None):
+        """Select what should be configured."""
         if self.config_entry.data.get("type") == "device":
             return await self.async_step_device_options()
 
         if user_input is not None:
             if user_input["section"] == "central":
                 return await self.async_step_central()
-
             if user_input["section"] == "notifications":
-                current = self.config_entry.data.get(
-                    "central",
-                    {},
-                )
-                self._central_config = dict(current)
-                self._central_changed = False
-                current_notifications = dict(
-                    current.get(
-                        "notifications",
-                        {},
-                    )
-                )
-                return await self.async_step_central_notifications(
-                    current=current_notifications
-                )
+                return await self.async_step_notification_list()
 
-        schema = vol.Schema(
-            {
-                vol.Required(
-                    "section",
-                    default="central",
-                ): selector.SelectSelector(
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema({
+                vol.Required("section", default="central"): selector.SelectSelector(
                     selector.SelectSelectorConfig(
                         options=["central", "notifications"],
                         mode=selector.SelectSelectorMode.LIST,
                         translation_key="configuration_section",
                     )
                 )
-            }
+            }),
         )
+
+    async def async_step_notification_list(self, user_input=None):
+        """Show the notification list and allow adding or managing one."""
+        central = self.config_entry.data.get("central", {})
+        if user_input is None:
+            profiles = self._get_notification_profiles(central.get("notifications", {}))
+            self._notification_profiles = profiles
+        else:
+            profiles = list(getattr(self, "_notification_profiles", []))
+            selection = user_input.get("notification_selection")
+            if selection == "__add__":
+                return await self.async_step_notification_add()
+
+            profile = next((item for item in profiles if item.get("id") == selection), None)
+            if profile is not None:
+                self._editing_notification = profile
+                return await self.async_step_notification_action(profile=profile)
+
+        options = [
+            {
+                "value": profile["id"],
+                "label": self._notification_label(profile),
+            }
+            for profile in profiles
+        ]
+        options.append({"value": "__add__", "label": "➕ Dodaj obavijest" if self.hass.config.language.startswith("hr") else "➕ Add notification"})
 
         return self.async_show_form(
-            step_id="init",
-            data_schema=schema,
-        )
-
-    async def async_step_central(
-        self,
-        user_input=None,
-    ):
-        """Edit central configuration."""
-
-        current = self.config_entry.data.get(
-            "central",
-            {},
-        )
-
-        if user_input is not None:
-            central_config = dict(user_input)
-
-            # Compare only Central Setup values. Notification settings are
-            # managed separately and must not make this form appear changed.
-            central_changed = any(
-                central_config.get(key) != current.get(key)
-                for key in (
-                    "inverter_off_grid_status",
-                    "power_meter_status",
-                    "recovery_delay",
-                    "central_pin",
-                    "pin_check",
-                    "recovery_enabled",
-                    "logs",
-                )
-            )
-
-            # Preserve the existing notification configuration when editing
-            # Central Setup. Notification settings are managed exclusively
-            # by the House power status notifications step and must not be
-            # deleted just because Central Setup is saved.
-            existing_central = self.config_entry.data.get(
-                "central",
-                {},
-            )
-            existing_notifications = existing_central.get(
-                "notifications",
-                {},
-            )
-
-            if existing_notifications:
-                central_config["notifications"] = dict(
-                    existing_notifications
-                )
-
-            if central_config.get(
-                "notifications_enabled",
-                False,
-            ):
-                self._central_config = central_config
-                self._central_changed = central_changed
-                current_notifications = dict(
-                    current.get(
-                        "notifications",
-                        {},
-                    )
-                )
-                return await self.async_step_central_notifications(
-                    current=current_notifications
-                )
-
-            old_notifications = current.get(
-                "notifications",
-                {},
-            )
-            automation_ids = old_notifications.get(
-                "generated_resources",
-                {},
-            ).get(
-                "automations",
-                [],
-            )
-            old_automation_id = (
-                automation_ids[0]
-                if old_notifications.get(
-                    "enabled",
-                    False,
-                ) and automation_ids
-                else None
-            )
-
-            if old_automation_id:
-                await async_remove_house_status_automation(
-                    self.hass,
-                    old_automation_id,
-                )
-
-            # Keep notification-generated resources intact. Notification
-            # automation lifecycle is managed by the notification settings
-            # flow, not by Central Setup.
-            existing_generated_resources = existing_central.get(
-                "generated_resources",
-                {},
-            )
-            if existing_generated_resources:
-                central_config["generated_resources"] = dict(
-                    existing_generated_resources
-                )
-
-            new_data = dict(
-                self.config_entry.data
-            )
-            new_data["central"] = central_config
-
-            self.hass.config_entries.async_update_entry(
-                self.config_entry,
-                data=new_data,
-            )
-
-            if central_changed:
-                await _async_show_restart_required_notification(
-                    self.hass,
-                    existing_notifications.get("language", "en"),
-                )
-
-            return self.async_create_entry(
-                title="",
-                data={},
-            )
-
-        schema = vol.Schema(
-            {
+            step_id="notification_list",
+            data_schema=vol.Schema({
                 vol.Required(
-                    "inverter_off_grid_status",
-                    default=current.get(
-                        "inverter_off_grid_status",
-                    ),
-                ): selector.EntitySelector(
-                    selector.EntitySelectorConfig(
-                        domain=[
-                            "sensor",
-                            "input_select",
-                        ],
-                    )
-                ),
-                vol.Required(
-                    "power_meter_status",
-                    default=current.get(
-                        "power_meter_status",
-                    ),
-                ): selector.EntitySelector(
-                    selector.EntitySelectorConfig(
-                        domain="sensor",
-                    )
-                ),
-                vol.Required(
-                    "recovery_delay",
-                    default=current.get(
-                        "recovery_delay",
-                        60,
-                    ),
-                ): selector.NumberSelector(
-                    selector.NumberSelectorConfig(
-                        min=1,
-                        max=600,
-                        step=1,
-                        mode=selector.NumberSelectorMode.BOX,
-                        unit_of_measurement="s",
-                    )
-                ),
-                vol.Required(
-                    "central_pin",
-                    default=current.get(
-                        "central_pin",
-                        "1234",
-                    ),
-                ): str,
-                vol.Required(
-                    "pin_check",
-                    default=current.get(
-                        "pin_check",
-                        True,
-                    ),
-                ): bool,
-                vol.Required(
-                    "recovery_enabled",
-                    default=current.get(
-                        "recovery_enabled",
-                        True,
-                    ),
-                ): bool,
-                vol.Required(
-                    "logs",
-                    default=normalize_log_level(
-                        current.get(
-                            "logs",
-                            "warnings",
-                        )
-                    ),
+                    "notification_selection",
+                    default=options[0]["value"] if options else "__add__",
                 ): selector.SelectSelector(
                     selector.SelectSelectorConfig(
-                        options=[
-                            "off",
-                            "warnings",
-                            "debug",
-                        ],
+                        options=options,
                         mode=selector.SelectSelectorMode.LIST,
-                        translation_key="log_level",
                     )
-                ),
-            }
+                )
+            }),
         )
 
-        return self.async_show_form(
-            step_id="central",
-            data_schema=schema,
-        )
-
-    async def async_step_central_notifications(
-        self,
-        user_input=None,
-        current=None,
-    ):
-        """Configure central house-status notifications."""
-        current = current or {}
+    async def async_step_notification_action(self, user_input=None, profile=None):
+        """Choose whether to edit or delete an existing notification."""
+        profile = profile or getattr(self, "_editing_notification", {})
+        if not profile:
+            return await self.async_step_notification_list()
 
         if user_input is not None:
-            # The config entry is the authoritative source for the
-            # previously saved notification settings. ``current`` is only
-            # used for form defaults and is not preserved by HA across the
-            # form submit callback.
-            old_notifications = dict(
-                self.config_entry.data.get(
-                    "central",
-                    {},
-                ).get(
-                    "notifications",
-                    {},
-                )
-            )
+            action = user_input.get("notification_action")
+            if action == "edit":
+                return await self.async_step_notification_edit(profile=profile)
+            if action == "delete":
+                return await self.async_step_notification_delete(profile=profile)
 
-            notification_types = []
-            if user_input.get("send_notification", False):
-                notification_types.append("notify")
-            if user_input.get("send_popup", False):
-                notification_types.append("popup")
-
-            notification_events = []
-            if user_input.get("notify_grid_status", True):
-                notification_events.append("grid")
-            if user_input.get("notify_protection_status", True):
-                notification_events.append("protection")
-            if user_input.get("notify_security", True):
-                notification_events.append("security")
-
-            notify_targets = list(user_input.get("notify_targets", []))
-            browser_mod_targets = list(
-                user_input.get("browser_mod_targets", [])
-            )
-            language = user_input.get(
-                "notification_language",
-                current.get("language", "en"),
-            )
-
-            new_notification_config = {
-                "enabled": bool(notification_types),
-                "notification_types": notification_types,
-                "notification_events": notification_events,
-                "notify_targets": notify_targets,
-                "browser_mod_targets": browser_mod_targets,
-                "language": language,
-            }
-
-            def _normalize_notification_value(
-                key,
-                value,
-            ):
-                if key in (
-                    "notification_types",
-                    "notification_events",
-                    "notify_targets",
-                    "browser_mod_targets",
-                ):
-                    return sorted(str(item) for item in (value or []))
-                if key == "enabled":
-                    return bool(value)
-                return value
-
-            notification_changed = any(
-                _normalize_notification_value(
-                    key,
-                    new_notification_config.get(key),
-                )
-                != _normalize_notification_value(
-                    key,
-                    old_notifications.get(key),
-                )
-                for key in (
-                    "enabled",
-                    "notification_types",
-                    "notification_events",
-                    "notify_targets",
-                    "browser_mod_targets",
-                    "language",
-                )
-            )
-
-            # Settings replace the single OGP notification automation.
-            # Also discover orphaned OGP automations created by earlier
-            # test versions so they cannot continue sending notifications.
-            old_ids = self._get_ogp_notification_automation_ids()
-            stored_id = current.get("automation_id")
-            if isinstance(stored_id, str):
-                old_ids.add(stored_id)
-
-            if not notification_types:
-                for automation_id in old_ids:
-                    await async_remove_house_status_automation(
-                        self.hass,
-                        automation_id,
-                    )
-
-                central_config = dict(
-                    getattr(
-                        self,
-                        "_central_config",
-                        self.config_entry.data.get("central", {}),
+        return self.async_show_form(
+            step_id="notification_action",
+            data_schema=vol.Schema({
+                vol.Required("notification_action", default="edit"): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=["edit", "delete"],
+                        mode=selector.SelectSelectorMode.LIST,
+                        translation_key="notification_action",
                     )
                 )
-                central_config.pop("notifications", None)
-                central_config["generated_resources"] = {
-                    "automations": [],
-                }
+            }),
+        )
 
-                new_data = dict(self.config_entry.data)
-                new_data["central"] = central_config
-                self.hass.config_entries.async_update_entry(
-                    self.config_entry,
-                    data=new_data,
-                )
+    async def async_step_notification_delete(self, user_input=None, profile=None):
+        """Confirm deletion of an existing notification profile."""
+        profile = profile or getattr(self, "_editing_notification", {})
+        if not profile:
+            return await self.async_step_notification_list()
 
-                # Central notification settings changed. Reload every
-                # configured OGP device so all device entries immediately
-                # use the current central configuration.
-                await self._async_reload_ogp_device_entries()
+        if user_input is not None:
+            if user_input.get("confirm_delete"):
+                profiles = [
+                    item
+                    for item in getattr(self, "_notification_profiles", [])
+                    if item.get("id") != profile.get("id")
+                ]
+                return await self._async_save_notification_profiles(profiles)
 
-                if (
-                    getattr(self, "_central_changed", False)
-                    or notification_changed
-                ):
-                    await _async_show_restart_required_notification(
-                        self.hass,
-                        language,
+            return await self.async_step_notification_list()
+
+        return self.async_show_form(
+            step_id="notification_delete",
+            data_schema=vol.Schema({
+                vol.Required("confirm_delete", default=False): bool,
+            }),
+        )
+
+    async def async_step_notification_add(self, user_input=None):
+        """Select the type of a new notification."""
+        profiles = list(getattr(self, "_notification_profiles", []))
+        if not profiles:
+            profiles = self._get_notification_profiles()
+        global_exists = any(profile.get("mode") == "global" for profile in profiles)
+        options = [] if global_exists else [{"value": "global", "label": "Globalna obavijest" if self.hass.config.language.startswith("hr") else "Global notification"}]
+        options.append({"value": "custom", "label": "Obavijest prema uređaju" if self.hass.config.language.startswith("hr") else "Per-device notification"})
+
+        if user_input is not None:
+            if user_input["notification_mode"] == "global":
+                return await self.async_step_notification_global()
+            return await self.async_step_notification_device()
+
+        return self.async_show_form(
+            step_id="notification_add",
+            data_schema=vol.Schema({
+                vol.Required("notification_mode", default=options[0]["value"]): selector.SelectSelector(
+                    selector.SelectSelectorConfig(
+                        options=options,
+                        mode=selector.SelectSelectorMode.LIST,
+                        translation_key="notification_mode",
                     )
-
-                return self.async_create_entry(
-                    title="",
-                    data={},
                 )
+            }),
+        )
 
-            errors = {}
-            if "notify" in notification_types and not notify_targets:
-                errors["base"] = "notify_target_required"
-            elif (
-                "popup" in notification_types
-                and not browser_mod_targets
-            ):
-                errors["base"] = "browser_mod_target_required"
+    async def async_step_notification_global(self, user_input=None, profile=None):
+        """Create or edit the single global notification profile."""
+        profile = profile or getattr(self, "_editing_notification", {})
+        if user_input is not None:
+            events = [
+                event
+                for event, key in (
+                    ("grid", "notify_grid_status"),
+                    ("protection", "notify_protection_status"),
+                    ("security", "notify_security"),
+                )
+                if user_input.get(key, False)
+            ]
 
-            if errors:
+            if not events:
                 return self.async_show_form(
-                    step_id="central_notifications",
-                    data_schema=self._central_notifications_schema(
-                        current, user_input
-                    ),
-                    errors=errors,
+                    step_id="notification_global",
+                    data_schema=self._notification_global_schema(profile, user_input),
+                    errors={"base": "notification_event_required"},
                 )
 
-            automation_id = (
-                current.get("automation_id")
-                or (next(iter(old_ids)) if old_ids else None)
-                or f"{AUTOMATION_ID_PREFIX}_{uuid4().hex[:12]}"
-            )
-
-            for old_id in old_ids:
-                if old_id != automation_id:
-                    await async_remove_house_status_automation(
-                        self.hass,
-                        old_id,
-                    )
-
-            central_config = dict(
-                getattr(
-                    self,
-                    "_central_config",
-                    self.config_entry.data.get("central", {}),
-                )
-            )
-            central_config["notifications"] = {
-                "enabled": True,
-                "notification_types": notification_types,
-                "notification_events": notification_events,
-                "notify_targets": notify_targets,
-                "browser_mod_targets": browser_mod_targets,
-                "language": language,
-                "automation_id": automation_id,
-            }
-            central_config["generated_resources"] = {
-                "automations": [automation_id],
-            }
-
-            await async_generate_house_status_automation(
-                self.hass,
-                automation_id=automation_id,
-                inverter_entity=central_config[
-                    "inverter_off_grid_status"
-                ],
-                notification_types=notification_types,
-                notification_events=notification_events,
-                notify_targets=notify_targets,
-                browser_mod_targets=browser_mod_targets,
-                language=language,
-            )
-
-            new_data = dict(self.config_entry.data)
-            new_data["central"] = central_config
-            self.hass.config_entries.async_update_entry(
-                self.config_entry,
-                data=new_data,
-            )
-
-            # Central notification settings changed. Reload every
-            # configured OGP device so all device entries immediately
-            # use the current central configuration.
-            await self._async_reload_ogp_device_entries()
-
-            if (
-                getattr(self, "_central_changed", False)
-                or notification_changed
-            ):
-                await _async_show_restart_required_notification(
-                    self.hass,
-                    language,
-                )
-
-            return self.async_create_entry(
-                title="",
-                data={},
+            new_profile = dict(profile)
+            new_profile.update({
+                "id": profile.get("id") or uuid4().hex,
+                "mode": "global",
+                "notification_types": ["notify"],
+                "notification_events": events,
+                "notify_targets": ["service:persistent_notification"],
+                "browser_mod_targets": [],
+                "language": user_input.get(
+                    "notification_language",
+                    profile.get("language", "en"),
+                ),
+                "automation_id": profile.get("automation_id")
+                or f"{AUTOMATION_ID_PREFIX}_{uuid4().hex[:12]}",
+            })
+            return await self._async_save_notification_profiles(
+                self._replace_notification_profile(new_profile)
             )
 
         return self.async_show_form(
-            step_id="central_notifications",
-            data_schema=self._central_notifications_schema(current)
+            step_id="notification_global",
+            data_schema=self._notification_global_schema(profile),
         )
 
-    def _central_notifications_schema(
-        self,
-        current=None,
-        submitted=None,
-    ):
-        """Build the central notification selector schema."""
-        current = current or {}
+    def _notification_global_schema(self, profile=None, submitted=None):
+        profile = profile or {}
         submitted = submitted or {}
 
-        def value(
-            key,
-            fallback,
-        ):
-            return submitted.get(
-                key,
-                current.get(
-                    key,
-                    fallback,
-                ),
-            )
+        def val(key, default):
+            return submitted.get(key, profile.get(key, default))
 
-        return vol.Schema(
-            {
-                vol.Required(
-                    "send_notification",
-                    default=(
-                        submitted.get(
-                            "send_notification",
-                            "notify"
-                            in value(
-                                "notification_types",
-                                ["notify"],
-                            ),
-                        )
-                    ),
-                ): bool,
-                vol.Required(
-                    "send_popup",
-                    default=(
-                        submitted.get(
-                            "send_popup",
-                            "popup"
-                            in value(
-                                "notification_types",
-                                [],
-                            ),
-                        )
-                    ),
-                ): bool,
-                vol.Optional(
-                    "notify_targets",
-                    default=value(
-                        "notify_targets",
-                        [],
-                    ),
-                ): selector.SelectSelector(
-                    selector.SelectSelectorConfig(
-                        options=get_notify_options(
-                            self.hass
-                        ),
-                        multiple=True,
-                        mode=selector.SelectSelectorMode.DROPDOWN,
-                    )
+        return vol.Schema({
+            vol.Required(
+                "notify_grid_status",
+                default="grid" in val(
+                    "notification_events",
+                    ["grid", "protection", "security"],
                 ),
-                vol.Optional(
-                    "browser_mod_targets",
-                    default=value(
-                        "browser_mod_targets",
-                        [],
-                    ),
-                ): selector.DeviceSelector(
-                    selector.DeviceSelectorConfig(
-                        integration="browser_mod",
-                        multiple=True,
-                    )
+            ): bool,
+            vol.Required(
+                "notify_protection_status",
+                default="protection" in val(
+                    "notification_events",
+                    ["grid", "protection", "security"],
                 ),
+            ): bool,
+            vol.Required(
+                "notify_security",
+                default="security" in val(
+                    "notification_events",
+                    ["grid", "protection", "security"],
+                ),
+            ): bool,
+            vol.Required(
+                "notification_language",
+                default=val("language", "en"),
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[
+                        {"value": "en", "label": "English"},
+                        {"value": "hr", "label": "Hrvatski"},
+                    ],
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            ),
+        })
+
+    async def async_step_notification_device(self, user_input=None, profile=None):
+        """Select the target type for a per-device notification."""
+        profile = profile or getattr(self, "_editing_notification", {})
+        if user_input is not None:
+            self._notification_target_type = user_input["target_type"]
+            return await self.async_step_notification_device_target(profile=profile)
+
+        return self.async_show_form(
+            step_id="notification_device",
+            data_schema=vol.Schema({
                 vol.Required(
-                    "notify_grid_status",
-                    default=(
-                        submitted.get(
-                            "notify_grid_status",
-                            "grid" in value(
-                                "notification_events",
-                                ["grid", "protection", "security"],
-                            ),
-                        )
-                    ),
-                ): bool,
-                vol.Required(
-                    "notify_protection_status",
-                    default=(
-                        submitted.get(
-                            "notify_protection_status",
-                            "protection" in value(
-                                "notification_events",
-                                ["grid", "protection", "security"],
-                            ),
-                        )
-                    ),
-                ): bool,
-                vol.Required(
-                    "notify_security",
-                    default=(
-                        submitted.get(
-                            "notify_security",
-                            "security" in value(
-                                "notification_events",
-                                ["grid", "protection", "security"],
-                            ),
-                        )
-                    ),
-                ): bool,
-                vol.Required(
-                    "notification_language",
-                    default=value(
-                        "notification_language",
-                        current.get(
-                            "language",
-                            "en",
-                        ),
-                    ),
+                    "target_type",
+                    default=profile.get("target_type", "notify"),
                 ): selector.SelectSelector(
                     selector.SelectSelectorConfig(
                         options=[
-                            {
-                                "value": "en",
-                                "label": "English",
-                            },
-                            {
-                                "value": "hr",
-                                "label": "Hrvatski",
-                            },
+                            {"value": "notify", "label": "Notify"},
+                            {"value": "popup", "label": "Browser Mod"},
                         ],
-                        mode=selector.SelectSelectorMode.DROPDOWN,
+                        mode=selector.SelectSelectorMode.LIST,
+                        translation_key="notification_target_type",
                     )
-                ),
-            }
+                )
+            }),
         )
 
+    async def async_step_notification_device_target(self, user_input=None, profile=None):
+        """Select one recipient/device and its notification events."""
+        profile = profile or getattr(self, "_editing_notification", {})
+        target_type = getattr(
+            self,
+            "_notification_target_type",
+            profile.get("target_type", "notify"),
+        )
 
+        if target_type == "notify":
+            target_options = get_notify_options(self.hass)
+        else:
+            target_options = get_browser_mod_device_options(self.hass)
 
+        if user_input is not None:
+            target = user_input.get("target")
+            events = list(user_input.get("events", []))
+            if not target:
+                return self.async_show_form(
+                    step_id="notification_device_target",
+                    data_schema=self._notification_device_target_schema(profile, target_type, user_input),
+                    errors={"base": "custom_target_required"},
+                )
+            if not events:
+                return self.async_show_form(
+                    step_id="notification_device_target",
+                    data_schema=self._notification_device_target_schema(profile, target_type, user_input),
+                    errors={"base": "custom_event_required"},
+                )
 
+            new_profile = dict(profile)
+            new_profile.update({
+                "id": profile.get("id") or uuid4().hex,
+                "mode": "custom",
+                "target_type": target_type,
+                "target": target,
+                "events": events,
+                "notification_events": events,
+                "language": user_input.get(
+                    "notification_language",
+                    profile.get("language", "en"),
+                ),
+                "automation_id": profile.get("automation_id") or f"{AUTOMATION_ID_PREFIX}_{uuid4().hex[:12]}",
+            })
+            return await self._async_save_notification_profiles(
+                self._replace_notification_profile(new_profile)
+            )
 
+        return self.async_show_form(
+            step_id="notification_device_target",
+            data_schema=self._notification_device_target_schema(
+                profile,
+                target_type,
+            ),
+        )
+
+    def _notification_device_target_schema(
+        self,
+        profile=None,
+        target_type="notify",
+        submitted=None,
+    ):
+        profile = profile or {}
+        submitted = submitted or {}
+        target_options = (
+            get_notify_options(self.hass)
+            if target_type == "notify"
+            else get_browser_mod_device_options(self.hass)
+        )
+        default_target = submitted.get(
+            "target",
+            profile.get("target"),
+        )
+        if default_target not in [item["value"] for item in target_options]:
+            default_target = target_options[0]["value"] if target_options else ""
+
+        return vol.Schema({
+            vol.Required(
+                "target",
+                default=default_target,
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=target_options,
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            ),
+            vol.Required(
+                "events",
+                default=submitted.get(
+                    "events",
+                    profile.get(
+                        "events",
+                        ["grid", "protection", "security"],
+                    ),
+                ),
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[
+                        "grid",
+                        "protection",
+                        "security",
+                    ],
+                    multiple=True,
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                    translation_key="notification_events",
+                )
+            ),
+            vol.Required(
+                "notification_language",
+                default=submitted.get(
+                    "notification_language",
+                    profile.get("language", "en"),
+                ),
+            ): selector.SelectSelector(
+                selector.SelectSelectorConfig(
+                    options=[
+                        {"value": "en", "label": "English"},
+                        {"value": "hr", "label": "Hrvatski"},
+                    ],
+                    mode=selector.SelectSelectorMode.DROPDOWN,
+                )
+            ),
+        })
+
+    async def async_step_notification_edit(self, user_input=None, profile=None):
+        """Open the editor for an existing notification."""
+        profile = profile or getattr(self, "_editing_notification", {})
+        if profile.get("mode") == "custom":
+            self._notification_target_type = profile.get("target_type", "notify")
+        if profile.get("mode") == "global":
+            return await self.async_step_notification_global(user_input=user_input, profile=profile)
+        return await self.async_step_notification_device(user_input=user_input, profile=profile)
+
+    def _replace_notification_profile(self, profile: dict) -> list[dict]:
+        profiles = list(getattr(self, "_notification_profiles", []))
+        if not profiles:
+            profiles = self._get_notification_profiles()
+        profile_id = profile["id"]
+        replaced = False
+        result = []
+        for item in profiles:
+            if item.get("id") == profile_id:
+                result.append(profile)
+                replaced = True
+            else:
+                result.append(item)
+        if not replaced:
+            result.append(profile)
+        return result
+
+    async def _async_save_notification_profiles(self, profiles: list[dict]):
+        """Replace generated notification automations and save all profiles."""
+        central_config = dict(self.config_entry.data.get("central", {}))
+        old_notifications = central_config.get("notifications", {})
+        old_ids = self._get_ogp_notification_automation_ids()
+        for profile in profiles:
+            if isinstance(profile.get("automation_id"), str):
+                old_ids.add(profile["automation_id"])
+
+        active_ids = set()
+        for profile in profiles:
+            automation_id = profile.get("automation_id") or f"{AUTOMATION_ID_PREFIX}_{uuid4().hex[:12]}"
+            profile["automation_id"] = automation_id
+            active_ids.add(automation_id)
+
+            if profile.get("mode") == "global":
+                # Global notification is always the built-in persistent
+                # notification service. Browser Mod is per-device only.
+                profile["notification_types"] = ["notify"]
+                profile["notify_targets"] = ["service:persistent_notification"]
+                profile["browser_mod_targets"] = []
+                await async_generate_house_status_automation(
+                    self.hass,
+                    automation_id=automation_id,
+                    inverter_entity=central_config["inverter_off_grid_status"],
+                    notification_types=profile.get("notification_types", []),
+                    notification_events=profile.get("notification_events", []),
+                    notify_targets=profile.get("notify_targets", []),
+                    browser_mod_targets=profile.get("browser_mod_targets", []),
+                    language=profile.get("language", "en"),
+                )
+            else:
+                target_type = profile.get("target_type")
+                target = profile.get("target")
+                events = profile.get("events", [])
+                custom_targets = {"notify": {}, "popup": {}}
+                custom_targets[target_type][target] = events
+                await async_generate_house_status_automation(
+                    self.hass,
+                    automation_id=automation_id,
+                    inverter_entity=central_config["inverter_off_grid_status"],
+                    notification_types=[target_type],
+                    notification_events=events,
+                    notify_targets=[target] if target_type == "notify" else [],
+                    browser_mod_targets=[target] if target_type == "popup" else [],
+                    language=profile.get("language", "en"),
+                    notification_mode="custom",
+                    custom_targets=custom_targets,
+                )
+
+        for automation_id in old_ids - active_ids:
+            await async_remove_house_status_automation(self.hass, automation_id)
+
+        notifications = {
+            "enabled": bool(profiles),
+            "profiles": profiles,
+            "generated_resources": {"automations": sorted(active_ids)},
+        }
+        # Keep the first profile mirrored in legacy fields for compatibility.
+        if profiles:
+            first = profiles[0]
+            notifications.update({
+                "notification_mode": first.get("mode", "global"),
+                "notification_types": first.get("notification_types", [first.get("target_type")] if first.get("target_type") else []),
+                "notification_events": first.get("notification_events", first.get("events", [])),
+                "notify_targets": first.get("notify_targets", [first.get("target")] if first.get("target_type") == "notify" else []),
+                "browser_mod_targets": first.get("browser_mod_targets", [first.get("target")] if first.get("target_type") == "popup" else []),
+                "language": first.get("language", "en"),
+                "automation_id": first.get("automation_id"),
+            })
+
+        central_config["notifications"] = notifications
+        central_config["generated_resources"] = dict(central_config.get("generated_resources", {}))
+        central_config["generated_resources"]["automations"] = sorted(active_ids)
+        new_data = dict(self.config_entry.data)
+        new_data["central"] = central_config
+        self.hass.config_entries.async_update_entry(self.config_entry, data=new_data)
+        await self._async_reload_ogp_device_entries()
+        language = profiles[0].get("language", "en") if profiles else old_notifications.get("language", "en")
+        await _async_show_restart_required_notification(self.hass, language)
+        return self.async_create_entry(title="", data={})
+
+    async def async_step_central(self, user_input=None):
+        """Edit central configuration."""
+        current = self.config_entry.data.get("central", {})
+        if user_input is not None:
+            central_config = dict(user_input)
+            central_changed = any(central_config.get(key) != current.get(key) for key in (
+                "inverter_off_grid_status", "power_meter_status", "recovery_delay", "central_pin", "pin_check", "recovery_enabled", "logs"))
+            existing = current.get("notifications", {})
+            if existing:
+                central_config["notifications"] = dict(existing)
+            if central_config.get("notifications_enabled", False):
+                self._central_config = central_config
+                self._central_changed = central_changed
+                return await self.async_step_notification_list()
+            new_data = dict(self.config_entry.data)
+            new_data["central"] = central_config
+            self.hass.config_entries.async_update_entry(self.config_entry, data=new_data)
+            if central_changed:
+                await _async_show_restart_required_notification(self.hass, existing.get("language", "en"))
+            return self.async_create_entry(title="", data={})
+        return self.async_show_form(step_id="central", data_schema=vol.Schema({
+            vol.Required("inverter_off_grid_status", default=current.get("inverter_off_grid_status")): selector.EntitySelector(selector.EntitySelectorConfig(domain=["sensor", "input_select"])),
+            vol.Required("power_meter_status", default=current.get("power_meter_status")): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
+            vol.Required("recovery_delay", default=current.get("recovery_delay", 60)): selector.NumberSelector(selector.NumberSelectorConfig(min=1, max=600, step=1, mode=selector.NumberSelectorMode.BOX, unit_of_measurement="s")),
+            vol.Required("central_pin", default=current.get("central_pin", "1234")): str,
+            vol.Required("pin_check", default=current.get("pin_check", True)): bool,
+            vol.Required("recovery_enabled", default=current.get("recovery_enabled", True)): bool,
+            vol.Required("logs", default=normalize_log_level(current.get("logs", "warnings"))): selector.SelectSelector(selector.SelectSelectorConfig(options=["off", "warnings", "debug"], mode=selector.SelectSelectorMode.LIST, translation_key="log_level")),
+        }))
 
     async def async_step_device_settings(
         self,

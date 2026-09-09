@@ -1,6 +1,6 @@
 # OGP --- Configuration Guide
 
-Detailed configuration guide for OGP v1.1.4.
+Detailed configuration guide for OGP v1.2.0.
 
 ## 1. Requirements and optional components
 
@@ -89,18 +89,44 @@ Debug is intended for commissioning, testing and diagnostics.
 
 ### 3.5 Notifications
 
-Notifications are optional.
+Notifications are optional and are managed as independent notification
+profiles. Open **Notifications** from OGP Options to view the existing
+profiles, add a new profile, edit an existing profile or delete one.
 
-Configure:
+OGP supports two notification profile types.
 
--   notification enable/disable;
--   Home Assistant notification targets;
--   Browser Mod popup targets;
--   notification categories;
--   notification language.
+#### Global notification
 
-Notification settings are stored independently and persist through
-central configuration changes and Home Assistant restarts.
+Only one Global notification profile can exist. When created or edited,
+it provides:
+
+-   **Grid status** event selection;
+-   **Protection / Override** event selection;
+-   **Security** event selection;
+-   notification language (**English** or **Croatian**).
+
+The Global notification always uses Home Assistant's built-in
+`persistent_notification` service. It does not use Browser Mod and does
+not require a notification target to be selected.
+
+#### Per-device notification
+
+Multiple Per-device notification profiles can exist. Each profile has its
+own target, event selection and language. The target type can be:
+
+-   **Notify** --- one Home Assistant notification target;
+-   **Browser Mod** --- one Browser Mod device.
+
+Each Per-device profile can independently select Grid status, Protection /
+Override and Security events and can use English or Croatian.
+
+The notification list is used to manage profiles independently. Editing a
+profile changes only that profile. Deleting a profile removes its generated
+notification automation. If the Global profile already exists, Global is
+not offered again when adding a new notification profile.
+
+Notification settings are stored independently and persist through central
+configuration changes and Home Assistant restarts.
 
 If OGP settings are changed, OGP can display a persistent notification
 recommending a Home Assistant restart. OGP does not restart Home

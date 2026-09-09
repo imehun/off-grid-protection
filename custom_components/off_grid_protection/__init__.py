@@ -2,15 +2,18 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import voluptuous as vol
 
 from homeassistant import config_entries
 from homeassistant.components import persistent_notification
-from homeassistant.config_entries import ConfigEntry
+from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
 from homeassistant.components.frontend.storage import async_user_store
 from homeassistant.helpers import config_validation as cv
 from homeassistant.util import slugify
+from homeassistant.helpers import issue_registry as ir
 
 from .central import OffGridCentral
 from .coordinator import (
@@ -725,36 +728,98 @@ async def async_setup_entry(
         {},
     )
 
-    if notifications.get("enabled"):
-        await async_generate_house_status_automation(
-            hass,
-            automation_id=notifications[
-                "automation_id"
-            ],
-            inverter_entity=central_config[
-                "inverter_off_grid_status"
-            ],
-            notification_types=notifications.get(
-                "notification_types",
-                [],
-            ),
-            notification_events=notifications.get(
-                "notification_events",
-                [],
-            ),
-            notify_targets=notifications.get(
-                "notify_targets",
-                [],
-            ),
-            browser_mod_targets=notifications.get(
-                "browser_mod_targets",
-                [],
-            ),
-            language=notifications.get(
-                "language",
-                "en",
-            ),
-        )
+    # Recreate all generated notification automations after a central
+    # unload/reload. V1.2.0 stores notifications as independent profiles;
+    # keep the legacy single-profile path for older entries.
+    profiles = notifications.get("profiles")
+
+    if isinstance(profiles, list):
+        for profile in profiles:
+            if not isinstance(profile, dict):
+                continue
+
+            automation_id = profile.get("automation_id")
+            if not isinstance(automation_id, str) or not automation_id:
+                continue
+
+            if profile.get("mode") == "global":
+                await async_generate_house_status_automation(
+                    hass,
+                    automation_id=automation_id,
+                    inverter_entity=central_config[
+                        "inverter_off_grid_status"
+                    ],
+                    notification_types=["notify"],
+                    notification_events=profile.get(
+                        "notification_events",
+                        [],
+                    ),
+                    notify_targets=[
+                        "service:persistent_notification"
+                    ],
+                    browser_mod_targets=[],
+                    language=profile.get("language", "en"),
+                )
+                continue
+
+            target_type = profile.get("target_type")
+            target = profile.get("target")
+            events = profile.get("events", [])
+
+            if target_type not in ("notify", "popup") or not isinstance(
+                target, str
+            ) or not target:
+                continue
+
+            custom_targets = {"notify": {}, "popup": {}}
+            custom_targets[target_type][target] = events
+
+            await async_generate_house_status_automation(
+                hass,
+                automation_id=automation_id,
+                inverter_entity=central_config[
+                    "inverter_off_grid_status"
+                ],
+                notification_types=[target_type],
+                notification_events=events,
+                notify_targets=[target] if target_type == "notify" else [],
+                browser_mod_targets=[target] if target_type == "popup" else [],
+                language=profile.get("language", "en"),
+                notification_mode="custom",
+                custom_targets=custom_targets,
+            )
+
+    elif notifications.get("enabled"):
+        # Legacy V1.1.5 / early V1.2 single notification profile.
+        automation_id = notifications.get("automation_id")
+        if isinstance(automation_id, str) and automation_id:
+            await async_generate_house_status_automation(
+                hass,
+                automation_id=automation_id,
+                inverter_entity=central_config[
+                    "inverter_off_grid_status"
+                ],
+                notification_types=notifications.get(
+                    "notification_types",
+                    [],
+                ),
+                notification_events=notifications.get(
+                    "notification_events",
+                    [],
+                ),
+                notify_targets=notifications.get(
+                    "notify_targets",
+                    [],
+                ),
+                browser_mod_targets=notifications.get(
+                    "browser_mod_targets",
+                    [],
+                ),
+                language=notifications.get(
+                    "language",
+                    "en",
+                ),
+            )
 
     hass.data.setdefault(DOMAIN, {})
     hass.data[DOMAIN][entry.entry_id] = coordinator
@@ -786,6 +851,57 @@ async def async_setup_entry(
 
     # Restore the real central coordinator for services and Device Entries.
     hass.data[DOMAIN][entry.entry_id] = coordinator
+
+    # When the Central Entry is disabled, Home Assistant unloads OGP.
+    # Re-enabling Central does not automatically retry separate Device Entries
+    # that previously failed because Central was disabled. Schedule the retry
+    # after Central setup has fully completed. Disabled Device Entries remain
+    # untouched.
+    async def _async_reload_enabled_device_entries() -> None:
+        for device_entry in hass.config_entries.async_entries(DOMAIN):
+            if device_entry.data.get("type") != "device":
+                continue
+
+            if device_entry.data.get("central_entry_id") != entry.entry_id:
+                continue
+
+            if device_entry.disabled_by is not None:
+                continue
+
+            if device_entry.state == ConfigEntryState.LOADED:
+                continue
+
+            await hass.config_entries.async_setup(
+                device_entry.entry_id
+            )
+
+    hass.async_create_task(
+        _async_reload_enabled_device_entries(),
+        name="off_grid_protection_reload_device_entries",
+    )
+
+    # If Central was just re-enabled after being disabled, create a Home
+    # Assistant Repair asking the user to restart HA. Do not restart HA
+    # automatically. The repair remains visible until the user confirms it
+    # or HA is restarted.
+    central_config = dict(entry.data.get("central", {}))
+    if central_config.pop("_restart_after_enable", False):
+        new_data = dict(entry.data)
+        new_data["central"] = central_config
+        hass.config_entries.async_update_entry(
+            entry,
+            data=new_data,
+        )
+
+        ir.async_create_issue(
+            hass,
+            DOMAIN,
+            "central_restart_required",
+            is_fixable=True,
+            is_persistent=False,
+            severity=ir.IssueSeverity.ERROR,
+            translation_key="central_restart_required",
+        )
 
     return True
 
@@ -890,6 +1006,19 @@ async def async_unload_entry(
         await async_remove_house_status_automation(
             hass,
             automation_id,
+        )
+
+    # Mark a Central disable so that the next enable triggers one full Home
+    # Assistant restart. Normal reloads while Central remains enabled do not
+    # set this marker.
+    if entry.disabled_by is not None:
+        central_config = dict(entry.data.get("central", {}))
+        central_config["_restart_after_enable"] = True
+        new_data = dict(entry.data)
+        new_data["central"] = central_config
+        hass.config_entries.async_update_entry(
+            entry,
+            data=new_data,
         )
 
     return unload_ok

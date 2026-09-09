@@ -186,14 +186,29 @@ niti distribuira izvorni kod Huawei Solar integracije.
 -   [`CONFIGURATION.md`](CONFIGURATION.md) --- detaljna konfiguracija
 -   [`CONFIGURATION_hr.md`](CONFIGURATION_hr.md) --- detaljne hrvatske upute
 
-## Verzija
+## Promjene u V1.2.1
 
-**v1.2.0 --- Stable**
+**v1.2.1 --- Stable**
 
-v1.2.0 dodaje zasebne profile obavijesti s Globalnom i obavijesti prema
-uređaju, uključujući zasebna Notify i Browser Mod odredišta, odabir
-događaja, izbor jezika te upravljanje profilima obavijesti (dodavanje,
-uređivanje i brisanje).
+V1.2.1 je maintenance i safety izdanje usmjereno na lifecycle
+integracije, sigurnost konfiguracije i brzinu učitavanja:
+
+-   **Reload integracije:** ponovnim omogućavanjem centralne OGP
+    integracije stvara se Home Assistant Repair zahtjev kako bi se OGP
+    integracija mogla ponovno ispravno učitati.
+-   **Zahtjev za restart:** Home Assistant se ne restartira automatski.
+    Restart se izvršava tek kada korisnik otvori Repair i potvrdi
+    Fix/Submit. Ako se ne potvrdi, Repair zahtjev ostaje aktivan.
+-   **Zaključavanje Settings u OFF-GRID-u:** OGP Settings nije moguće
+    mijenjati dok je aktivna OFF-GRID zaštita. Time se sprječava da
+    promjena konfiguracije utječe na aktivni zaštitni ciklus.
+-   **Optimizacija ikone:** ikona integracije smanjena je i optimizirana
+    s 1254x1254 (~1,52 MB) na 512x512 (~240 KB) radi bržeg učitavanja.
+-   **Prijevodi:** nove Repair i OFF-GRID Settings lock poruke dostupne
+    su na engleskom i hrvatskom jeziku.
+
+Protection, shutdown, recovery i Override logika iz stabilne V1.2.0
+verzije ostaju nepromijenjene.
 
 ## Odricanje od odgovornosti
 

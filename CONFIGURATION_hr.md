@@ -1,6 +1,22 @@
 # OGP --- Upute za konfiguraciju
 
-Detaljne upute za konfiguraciju OGP-a v1.2.0.
+Detaljne upute za konfiguraciju OGP-a v1.2.1.
+
+## Promjene u V1.2.1
+
+V1.2.1 donosi sljedeće operativne promjene:
+
+- Ponovno omogućavanje centralne OGP integracije stvara Home Assistant
+  Repair zahtjev za ispravno ponovno učitavanje integracije.
+- Home Assistant se restartira tek nakon korisničke potvrde Repair
+  Fix/Submit radnje.
+- OGP Settings su blokirane dok je aktivna OFF-GRID zaštita.
+- Ikona integracije je smanjena i optimizirana radi bržeg učitavanja.
+- Repair i Settings-lock poruke prevedene su na engleski i hrvatski.
+
+Protection, shutdown, recovery i Override logika ostaju nepromijenjene
+u odnosu na V1.2.0.
+
 
 ## 1. Zahtjevi i opcionalne komponente
 
@@ -134,6 +150,35 @@ automatski.
 Početni prijelaz `unavailable`/`unknown` → valjano stanje mreže nakon
 pokretanja Home Assistanta potiskuje se kako se ne bi javila lažna
 obavijest o promjeni mrežnog stanja.
+
+## 3.6 Settings tijekom OFF-GRID zaštite
+
+OGP Settings nije moguće mijenjati dok je aktivna OFF-GRID zaštita.
+
+Blokada vrijedi za centralnu i Device Entry konfiguraciju, uključujući
+postavke obavijesti. Time se sprječava promjena konfiguracije i ponovno
+učitavanje OGP-a tijekom aktivnog zaštitnog ciklusa.
+
+Ako su Settings već otvorene prije početka OFF-GRID zaštite, kasniji
+Submit također se odbija dok je zaštita aktivna.
+
+Settings ponovno postaju dostupne nakon završetka OFF-GRID zaštitnog
+ciklusa i recoveryja.
+
+## 3.7 Ponovno omogućavanje centralnog OGP entryja
+
+Ako se centralni OGP entry onemogući i zatim ponovno omogući, Home
+Assistant može zahtijevati potpuni restart kako bi se svi OGP Device
+Entryji ponovno ispravno učitali.
+
+OGP stvara Home Assistant Repair zahtjev koji preporučuje restart.
+
+Restart nije automatski. Korisnik mora otvoriti Repair, odabrati
+popravak i potvrditi ga. Ako se popravak ne potvrdi, Repair zahtjev
+ostaje aktivan.
+
+Ovo ne mijenja OGP protection, shutdown, recovery niti Override
+sekvencu.
 
 ## 4. Konfiguracija Device Entryja
 

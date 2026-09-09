@@ -184,14 +184,31 @@ or distribute Huawei Solar source code.
 -   [`CONFIGURATION.md`](CONFIGURATION.md) --- Detailed configuration
 -   [`CONFIGURATION_hr.md`](CONFIGURATION_hr.md) --- Detailed Croatian configuration
 
-## Version
+## V1.2.1 changes
 
-**v1.2.0 --- Stable**
+**v1.2.1 --- Stable**
 
-v1.2.0 adds independent notification profiles with Global and
-Per-device configuration, including per-device Notify and Browser Mod
-targets, separate event selection, notification language selection, and
-notification profile management (add, edit and delete).
+V1.2.1 is a maintenance and safety release focused on integration
+lifecycle, configuration safety and loading performance:
+
+-   **Integration reload:** re-enabling the central OGP integration
+    creates a Home Assistant Repair request so the OGP integration can
+    be reloaded cleanly.
+-   **Restart request:** the Home Assistant restart is not automatic.
+    It is performed only after the user opens the Repair and confirms
+    the Fix/Submit action. If it is not confirmed, the Repair request
+    remains active.
+-   **OFF-GRID Settings lock:** OGP Settings cannot be changed while
+    OFF-GRID protection is active. This prevents configuration changes
+    from interfering with an active protection cycle.
+-   **Icon optimization:** the integration icon was resized and
+    optimized from 1254x1254 (~1.52 MB) to 512x512 (~240 KB) for faster
+    loading.
+-   **Translations:** the new Repair and OFF-GRID Settings lock messages
+    are available in English and Croatian.
+
+The protection, shutdown, recovery and Override logic from the stable
+V1.2.0 release remains unchanged.
 
 ## Disclaimer
 

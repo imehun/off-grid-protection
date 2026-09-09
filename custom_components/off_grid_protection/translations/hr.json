@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "OGP – Off-grid Protection",
-        "description": "Konfigurirajte OGP – Off-grid Protection.\\n\\n### 📚 Dokumentacija\\n\\n[📖 Konfiguracija (English)]({configuration_en_url})\\n\\n[📚 Konfiguracija (Hrvatski)]({configuration_hr_url})\\n\\n[🐙 GitHub repozitorij]({github_url})",
+        "description": "Konfigurirajte OGP – Off-grid Protection.\n\n### 📚 Dokumentacija\n\n[📖 Konfiguracija (English)]({configuration_en_url})\n\n[📚 Konfiguracija (Hrvatski)]({configuration_hr_url})\n\n[🐙 GitHub repozitorij]({github_url})",
         "data": {
           "name": "Naziv"
         }
@@ -171,7 +171,8 @@
     },
     "abort": {
       "device_added": "**Uređaj dodan**\n\nUređaj je uspješno dodan u OGP – Off-grid Protection. Generirani OGP entityji i Lovelace upute su spremni.",
-      "generation_cancelled": "**Generiranje otkazano**\n\nGeneriranje Lovelace YAML-a je otkazano."
+      "generation_cancelled": "**Generiranje otkazano**\n\nGeneriranje Lovelace YAML-a je otkazano.",
+      "settings_locked_off_grid": "Postavke nisu dostupne dok je OGP zaštita od rada izvan mreže aktivna. Pričekajte povratak mreže i završetak oporavka zaštite."
     },
     "error": {
       "notification_type_required": "Odaberite barem jedan način obavijesti.",
@@ -334,7 +335,9 @@
         }
       }
     },
-    "abort": {}
+    "abort": {
+      "settings_locked_off_grid": "Postavke nisu dostupne dok je OGP zaštita od rada izvan mreže aktivna. Pričekajte povratak mreže i završetak oporavka zaštite."
+    }
   },
   "selector": {
     "configuration_type": {
@@ -426,6 +429,20 @@
         "state_attributes": {
           "remaining": {
             "name": "Preostalo"
+          }
+        }
+      }
+    }
+  },
+  "issues": {
+    "central_restart_required": {
+      "title": "Potreban je restart Home Assistanta",
+      "description": "OGP Central je ponovno omogućen. Home Assistant se mora restartati kako bi se svi OGP uređaji ispravno učitali.",
+      "fix_flow": {
+        "step": {
+          "init": {
+            "title": "Restart Home Assistanta",
+            "description": "Potvrdite restart Home Assistanta. Ako ne potvrdite, ovaj zahtjev za popravak ostaje aktivan dok se Home Assistant ne restartira."
           }
         }
       }

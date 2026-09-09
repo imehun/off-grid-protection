@@ -3,7 +3,7 @@
     "step": {
       "user": {
         "title": "Off-grid Protection",
-        "description": "Configure Off-grid Protection.\\n\\n### 📚 Documentation\\n\\n[📖 Configuration (English)]({configuration_en_url})\\n\\n[📚 Konfiguracija (Hrvatski)]({configuration_hr_url})\\n\\n[🐙 GitHub repository]({github_url})",
+        "description": "Configure Off-grid Protection.\n\n### 📚 Documentation\n\n[📖 Configuration (English)]({configuration_en_url})\n\n[📚 Konfiguracija (Hrvatski)]({configuration_hr_url})\n\n[🐙 GitHub repository]({github_url})",
         "data": {
           "name": "Name"
         }
@@ -171,7 +171,8 @@
     },
     "abort": {
       "device_added": "**Device added**\n\nThe device was successfully added to Off-grid Protection. Generated OGP entities and Lovelace instructions are ready.",
-      "generation_cancelled": "**Generation cancelled**\n\nLovelace YAML generation was cancelled."
+      "generation_cancelled": "**Generation cancelled**\n\nLovelace YAML generation was cancelled.",
+      "settings_locked_off_grid": "Settings are unavailable while OGP Off-grid Protection is active. Wait until the grid returns and protection recovery is complete."
     },
     "error": {
       "notification_type_required": "Select at least one notification type.",
@@ -334,7 +335,9 @@
         }
       }
     },
-    "abort": {}
+    "abort": {
+      "settings_locked_off_grid": "Settings are unavailable while OGP Off-grid Protection is active. Wait until the grid returns and protection recovery is complete."
+    }
   },
   "selector": {
     "configuration_type": {
@@ -426,6 +429,20 @@
         "state_attributes": {
           "remaining": {
             "name": "Remaining"
+          }
+        }
+      }
+    }
+  },
+  "issues": {
+    "central_restart_required": {
+      "title": "Home Assistant restart required",
+      "description": "OGP Central has been enabled again. Home Assistant must be restarted so all OGP devices can be loaded correctly.",
+      "fix_flow": {
+        "step": {
+          "init": {
+            "title": "Restart Home Assistant",
+            "description": "Confirm to restart Home Assistant. If you do not confirm, this repair request remains active until Home Assistant is restarted."
           }
         }
       }

@@ -18,6 +18,7 @@ from homeassistant.util import slugify
 from . import DOMAIN
 from .lovelace import generate_setup_instructions
 from .coordinator import normalize_log_level
+from .runtime import GridStatus
 from .notifications import (
     AUTOMATION_ID_PREFIX,
     async_generate_house_status_automation,
@@ -123,6 +124,36 @@ def _get_configured_main_entity_ids(
     return configured
 
 
+def _ogp_settings_locked_off_grid(
+    hass,
+    config_entry,
+) -> bool:
+    """Return True while OGP is actively protecting the system OFF-GRID."""
+    central_entry_id = config_entry.entry_id
+
+    if config_entry.data.get("type") == "device":
+        central_entry_id = config_entry.data.get("central_entry_id")
+
+    if not isinstance(central_entry_id, str):
+        return False
+
+    coordinator = hass.data.get(DOMAIN, {}).get(
+        central_entry_id
+    )
+
+    if coordinator is None:
+        return False
+
+    runtime = getattr(coordinator, "runtime", None)
+    if runtime is None:
+        return False
+
+    return (
+        runtime.grid_status == GridStatus.OFF_GRID
+        and runtime.protection_active
+    )
+
+
 class OffGridProtectionConfigFlow(
     config_entries.ConfigFlow,
     domain=DOMAIN,
@@ -178,11 +209,6 @@ class OffGridProtectionConfigFlow(
         return self.async_show_form(
             step_id="user",
             data_schema=schema,
-            description_placeholders={
-                "configuration_en_url": "https://github.com/imehun/off-grid-protection/blob/main/CONFIGURATION.md",
-                "configuration_hr_url": "https://github.com/imehun/off-grid-protection/blob/main/CONFIGURATION_hr.md",
-                "github_url": "https://github.com/imehun/off-grid-protection",
-            },
         )
 
     async def async_step_type(
@@ -1337,6 +1363,9 @@ class OffGridProtectionOptionsFlow(
     ):
         """Select what should be configured for this device."""
 
+        if _ogp_settings_locked_off_grid(self.hass, self.config_entry):
+            return self.async_abort(reason="settings_locked_off_grid")
+
         if user_input is not None:
             action = user_input["action"]
 
@@ -1378,6 +1407,9 @@ class OffGridProtectionOptionsFlow(
         device = self.config_entry.data.get("device", {})
 
         if user_input is not None:
+            if _ogp_settings_locked_off_grid(self.hass, self.config_entry):
+                return self.async_abort(reason="settings_locked_off_grid")
+
             language = user_input["lovelace_language"]
 
             instructions = generate_setup_instructions(
@@ -1502,6 +1534,9 @@ class OffGridProtectionOptionsFlow(
 
     async def async_step_init(self, user_input=None):
         """Select what should be configured."""
+        if _ogp_settings_locked_off_grid(self.hass, self.config_entry):
+            return self.async_abort(reason="settings_locked_off_grid")
+
         if self.config_entry.data.get("type") == "device":
             return await self.async_step_device_options()
 
@@ -1646,88 +1681,46 @@ class OffGridProtectionOptionsFlow(
         """Create or edit the single global notification profile."""
         profile = profile or getattr(self, "_editing_notification", {})
         if user_input is not None:
-            events = [
-                event
-                for event, key in (
-                    ("grid", "notify_grid_status"),
-                    ("protection", "notify_protection_status"),
-                    ("security", "notify_security"),
-                )
-                if user_input.get(key, False)
-            ]
-
-            if not events:
-                return self.async_show_form(
-                    step_id="notification_global",
-                    data_schema=self._notification_global_schema(profile, user_input),
-                    errors={"base": "notification_event_required"},
-                )
-
+            notification_types = []
+            if user_input.get("send_notification"):
+                notification_types.append("notify")
+            if user_input.get("send_popup"):
+                notification_types.append("popup")
+            events = [event for event, key in (("grid", "notify_grid_status"), ("protection", "notify_protection_status"), ("security", "notify_security")) if user_input.get(key, True)]
+            if not notification_types:
+                return self.async_show_form(step_id="notification_global", data_schema=self._notification_global_schema(profile, user_input), errors={"base": "notification_type_required"})
+            if "notify" in notification_types and not user_input.get("notify_targets"):
+                return self.async_show_form(step_id="notification_global", data_schema=self._notification_global_schema(profile, user_input), errors={"base": "notify_target_required"})
+            if "popup" in notification_types and not user_input.get("browser_mod_targets"):
+                return self.async_show_form(step_id="notification_global", data_schema=self._notification_global_schema(profile, user_input), errors={"base": "browser_mod_target_required"})
             new_profile = dict(profile)
             new_profile.update({
                 "id": profile.get("id") or uuid4().hex,
                 "mode": "global",
-                "notification_types": ["notify"],
+                "notification_types": notification_types,
                 "notification_events": events,
-                "notify_targets": ["service:persistent_notification"],
-                "browser_mod_targets": [],
-                "language": user_input.get(
-                    "notification_language",
-                    profile.get("language", "en"),
-                ),
-                "automation_id": profile.get("automation_id")
-                or f"{AUTOMATION_ID_PREFIX}_{uuid4().hex[:12]}",
+                "notify_targets": list(user_input.get("notify_targets", [])),
+                "browser_mod_targets": list(user_input.get("browser_mod_targets", [])),
+                "language": user_input.get("notification_language", profile.get("language", "en")),
+                "automation_id": profile.get("automation_id") or f"{AUTOMATION_ID_PREFIX}_{uuid4().hex[:12]}",
             })
-            return await self._async_save_notification_profiles(
-                self._replace_notification_profile(new_profile)
-            )
+            return await self._async_save_notification_profiles(self._replace_notification_profile(new_profile))
 
-        return self.async_show_form(
-            step_id="notification_global",
-            data_schema=self._notification_global_schema(profile),
-        )
+        return self.async_show_form(step_id="notification_global", data_schema=self._notification_global_schema(profile))
 
     def _notification_global_schema(self, profile=None, submitted=None):
         profile = profile or {}
         submitted = submitted or {}
-
-        def val(key, default):
-            return submitted.get(key, profile.get(key, default))
-
+        def val(key, default): return submitted.get(key, profile.get(key, default))
         return vol.Schema({
-            vol.Required(
-                "notify_grid_status",
-                default="grid" in val(
-                    "notification_events",
-                    ["grid", "protection", "security"],
-                ),
-            ): bool,
-            vol.Required(
-                "notify_protection_status",
-                default="protection" in val(
-                    "notification_events",
-                    ["grid", "protection", "security"],
-                ),
-            ): bool,
-            vol.Required(
-                "notify_security",
-                default="security" in val(
-                    "notification_events",
-                    ["grid", "protection", "security"],
-                ),
-            ): bool,
-            vol.Required(
-                "notification_language",
-                default=val("language", "en"),
-            ): selector.SelectSelector(
-                selector.SelectSelectorConfig(
-                    options=[
-                        {"value": "en", "label": "English"},
-                        {"value": "hr", "label": "Hrvatski"},
-                    ],
-                    mode=selector.SelectSelectorMode.DROPDOWN,
-                )
-            ),
+            vol.Required("send_notification", default="notify" in val("notification_types", ["notify"])): bool,
+            vol.Required("send_popup", default="popup" in val("notification_types", [])): bool,
+            vol.Optional("notify_targets", default=val("notify_targets", [])): selector.SelectSelector(selector.SelectSelectorConfig(options=get_notify_options(self.hass), multiple=True, mode=selector.SelectSelectorMode.DROPDOWN)),
+            vol.Optional("browser_mod_targets", default=val("browser_mod_targets", [])): selector.DeviceSelector(selector.DeviceSelectorConfig(integration="browser_mod", multiple=True)),
+            vol.Required("notify_grid_status", default="grid" in val("notification_events", ["grid", "protection", "security"])): bool,
+            vol.Required("notify_protection_status", default="protection" in val("notification_events", ["grid", "protection", "security"])): bool,
+            vol.Required("notify_security", default="security" in val("notification_events", ["grid", "protection", "security"])): bool,
+            vol.Required("notification_language", default=val("language", "en")): selector.SelectSelector(selector.SelectSelectorConfig(options=["en", "hr"], mode=selector.SelectSelectorMode.DROPDOWN)),
         })
 
     async def async_step_notification_device(self, user_input=None, profile=None):
@@ -1871,10 +1864,7 @@ class OffGridProtectionOptionsFlow(
                 ),
             ): selector.SelectSelector(
                 selector.SelectSelectorConfig(
-                    options=[
-                        {"value": "en", "label": "English"},
-                        {"value": "hr", "label": "Hrvatski"},
-                    ],
+                    options=["en", "hr"],
                     mode=selector.SelectSelectorMode.DROPDOWN,
                 )
             ),
@@ -1908,6 +1898,9 @@ class OffGridProtectionOptionsFlow(
 
     async def _async_save_notification_profiles(self, profiles: list[dict]):
         """Replace generated notification automations and save all profiles."""
+        if _ogp_settings_locked_off_grid(self.hass, self.config_entry):
+            return self.async_abort(reason="settings_locked_off_grid")
+
         central_config = dict(self.config_entry.data.get("central", {}))
         old_notifications = central_config.get("notifications", {})
         old_ids = self._get_ogp_notification_automation_ids()
@@ -1922,11 +1915,6 @@ class OffGridProtectionOptionsFlow(
             active_ids.add(automation_id)
 
             if profile.get("mode") == "global":
-                # Global notification is always the built-in persistent
-                # notification service. Browser Mod is per-device only.
-                profile["notification_types"] = ["notify"]
-                profile["notify_targets"] = ["service:persistent_notification"]
-                profile["browser_mod_targets"] = []
                 await async_generate_house_status_automation(
                     self.hass,
                     automation_id=automation_id,
@@ -1992,6 +1980,9 @@ class OffGridProtectionOptionsFlow(
         """Edit central configuration."""
         current = self.config_entry.data.get("central", {})
         if user_input is not None:
+            if _ogp_settings_locked_off_grid(self.hass, self.config_entry):
+                return self.async_abort(reason="settings_locked_off_grid")
+
             central_config = dict(user_input)
             central_changed = any(central_config.get(key) != current.get(key) for key in (
                 "inverter_off_grid_status", "power_meter_status", "recovery_delay", "central_pin", "pin_check", "recovery_enabled", "logs"))
@@ -2033,6 +2024,9 @@ class OffGridProtectionOptionsFlow(
         device_type = device["type"]
 
         if user_input is not None:
+            if _ogp_settings_locked_off_grid(self.hass, self.config_entry):
+                return self.async_abort(reason="settings_locked_off_grid")
+
             show_all = bool(
                 user_input.get(
                     "show_all_automations",

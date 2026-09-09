@@ -1,6 +1,23 @@
 # OGP --- Configuration Guide
 
-Detailed configuration guide for OGP v1.2.0.
+Detailed configuration guide for OGP v1.2.1.
+
+## V1.2.1 release changes
+
+V1.2.1 adds the following operational changes:
+
+- Re-enabling the central OGP integration creates a Home Assistant
+  Repair request for a clean integration reload.
+- Home Assistant is restarted only after the user confirms the Repair
+  Fix/Submit action.
+- OGP Settings are blocked while OFF-GRID protection is active.
+- The integration icon is resized and optimized for faster loading.
+- Repair and Settings-lock messages are translated in English and
+  Croatian.
+
+The protection, shutdown, recovery and Override logic is unchanged from
+V1.2.0.
+
 
 ## 1. Requirements and optional components
 
@@ -135,6 +152,35 @@ Assistant automatically.
 Initial `unavailable`/`unknown` → valid grid state transitions after
 Home Assistant startup are suppressed so they are not reported as normal
 grid changes.
+
+## 3.6 Settings during OFF-GRID protection
+
+OGP Settings cannot be changed while OFF-GRID protection is active.
+
+This lock applies to central and Device Entry configuration, including
+notification settings. It prevents configuration changes from reloading
+OGP while the protection cycle is active.
+
+If Settings were already open before OFF-GRID protection started, a later
+submission is also rejected while protection remains active.
+
+Settings become available again after the OFF-GRID protection cycle has
+ended and recovery is complete.
+
+## 3.7 Re-enabling the central OGP entry
+
+If the central OGP entry is disabled and later enabled again, Home
+Assistant may require a full restart to load all OGP Device Entries
+cleanly.
+
+OGP creates a Home Assistant Repair request recommending a restart.
+
+The restart is not automatic. The user must open the Repair, choose the
+fix and confirm it. If the fix is not confirmed, the Repair request
+remains active.
+
+This does not change the OGP protection, shutdown, recovery or Override
+sequence.
 
 ## 4. Device Entry configuration
 

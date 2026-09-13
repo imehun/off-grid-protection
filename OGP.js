@@ -690,7 +690,24 @@ class OGPCard extends HTMLElement {
       const selector = field.selector || {};
       let input;
 
-      if (selector.select) {
+      if (selector.entity) {
+        // Home Assistant's REST Options Flow exposes entity selectors as
+        // `selector.entity`. Use the native HA selector component so the
+        // user gets the same searchable entity list as a normal HA form.
+        input = document.createElement("ha-selector");
+        input.hass = this._hass;
+        input.selector = { entity: selector.entity };
+        input.value =
+          field.value !== undefined
+            ? field.value
+            : field.default !== undefined
+              ? field.default
+              : "";
+        input.dataset.flowField = name;
+        input.style.display = "block";
+        input.style.width = "100%";
+        wrapper.appendChild(input);
+      } else if (selector.select) {
         const multiple = Boolean(selector.select.multiple);
         const options = selector.select.options || [];
         const selected = Array.isArray(field.value)

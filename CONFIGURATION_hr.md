@@ -2,6 +2,30 @@
 
 Detaljne upute za konfiguraciju OGP-a v1.2.1.
 
+## Promjene u V1.3.0
+
+V1.3.0 dodaje OGP Lovelace UI sloj i centralni generator Lovelace YAML-a
+bez promjene postojeće lifecycle zaštite.
+
+- Glavni Lovelace card prikazuje centralni status, recovery countdown,
+  status uređaja i Override kontrole.
+- Centralne Options nude **Centralne postavke**, **Obavijesti** i
+  **Generiraj Lovelace YAML**.
+- Centralni Lovelace generator generira jednu kompletnu konfiguraciju
+  carda iz trenutno konfigurirane centrale i Device Entryja.
+- Centralni generator nema odabir jezika. Generirani card sam podržava
+  hrvatski i engleski UI.
+- Generirani OGP helper entityji pronalaze se preko Home Assistant Entity
+  Registryja, pa generator ispravno može koristiti ručno preimenovane
+  entityje.
+- Custom Device Details prikazuje konfigurirani Control entity pod
+  **Automatizacije / entities**.
+- Lovelace card je samo UI sloj. Postojeća OGP protection, shutdown,
+  recovery i Override logika ostaje autoritativna.
+
+Workflow automatskog ponovnog generiranja glavnog Lovelace YAML-a nakon
+dodavanja ili brisanja uređaja nije uključen u V1.3.0.
+
 ## Promjene u V1.2.1
 
 V1.2.1 donosi sljedeće operativne promjene:
@@ -348,15 +372,105 @@ isključiti i zaključati. Korisnik ga mora ručno isključiti.
 
 Override je namjerna iznimka od safety reassertiona.
 
-## 9. Generirani Lovelace YAML
+## 9. Lovelace UI i generirani YAML
 
-Generirani Lovelace YAML je početni predložak.
+V1.3.0 donosi glavni `custom:ogp-card` Lovelace card.
 
-Može koristiti Browser Mod, Button-card i Stack-in-card, ali oni nisu
-dependency osnovne OGP zaštitne funkcionalnosti.
+Konfiguracija carda sadrži:
 
-Custom Device YAML može zahtijevati prilagodbu stvarnom Device entityju
-i željenom sučelju.
+```yaml
+type: custom:ogp-card
+grid_status_entity: sensor.example_grid_status
+central_entry_id: <ID centralnog OGP config entryja>
+home_dashboard_path: /dashboard
+devices:
+  - name: "Primjer uređaja"
+    entity: climate.example
+    protection_status_entity: sensor.example_protection_status
+    locked_entity: binary_sensor.example_off_grid_protection_locked
+    override_duration_entity: number.example_override_duration
+    override_remaining_entity: sensor.example_override_remaining
+    override_pin_entity: text.example_override_pin
+```
+
+Lista uređaja generira se iz trenutno konfiguriranih OGP Device Entryja.
+
+### 9.1 Instalacija OGP.js
+
+Datoteka `OGP.js` je frontend Lovelace card koji koristi
+`custom:ogp-card`. Instalira se odvojeno od Python datoteka integracije.
+
+1. Kopirajte `OGP.js` u direktorij Home Assistanta `/config/www/`.
+2. Zadržite naziv datoteke `OGP.js`.
+3. U Home Assistantu otvorite **Settings → Dashboards → Resources**.
+4. Dodajte sljedeći resource:
+   - **URL:** `/local/OGP.js`
+   - **Resource type:** `JavaScript module`
+5. Spremite resource i ponovno učitajte Home Assistant frontend
+   (možda će biti potreban hard refresh preglednika).
+
+Nakon instalacije card se koristi s:
+
+```yaml
+type: custom:ogp-card
+```
+
+Datoteka `OGP.js` je Lovelace frontend komponenta. Python integracija
+OGP-a je ne instalira automatski.
+
+### 9.2 Centralni Lovelace YAML generator
+
+Otvorite **Options** centralnog OGP entryja i odaberite:
+
+**Generiraj Lovelace YAML**
+
+Generator stvara kompletnu konfiguraciju carda za trenutni centralni
+entry i sve enabled OGP Device Entryje koji mu pripadaju.
+
+Kod ovog generatora nema odabira jezika. Generirani card sam upravlja
+hrvatskim i engleskim UI-em.
+
+Generator koristi Home Assistant Entity Registry za pronalaženje
+generiranih OGP helper entityja. To je važno ako je korisnik nakon
+generiranja preimenovao entity u Home Assistantu. Originalni generirani
+entity ID koji OGP pamti koristi se kao početna točka, a Registry
+pronalazi njegov trenutni entity ID.
+
+Ako entity nije moguće nedvosmisleno pronaći, generator zadržava
+originalni generirani ID umjesto da nasumično odabere drugi entity.
+
+### 9.3 Ponašanje glavnog carda
+
+Lovelace card je UI sloj iznad postojeće OGP backend logike.
+
+- Normalnom zaštitom i dalje upravlja OGP.
+- Ručne ON / OFF kontrole uređaja dostupne su samo dok je aktivan
+  postojeći Override uređaja.
+- Centralne postavke, reload i enable/disable koriste postojeće
+  OGP/Home Assistant mehanizme.
+- Card ne implementira alternativni algoritam zaštite ili recoveryja.
+
+### 9.4 Device Details
+
+Device Details prikazuje konfigurirani Home Assistant entity i
+generirane OGP helper entityje.
+
+Kod standardnih Climate i Switch uređaja prikazuju se povezane korisničke
+automatizacije.
+
+Kod Custom Devicea konfigurirani `control_entity_id` prikazuje se kao
+**Automatizacije / entities**, jer je riječ o vanjskom Control entityju,
+a ne o listi OGP-om upravljanih korisničkih automatizacija.
+
+### 9.4 Opcionalne frontend komponente
+
+Generirani Lovelace YAML je početni predložak i može se slobodno
+prilagoditi.
+
+Button-card i Stack-in-card su opcionalna preporuka za generirani
+Override dashboard. Browser Mod je relevantan samo za Browser Mod popup
+obavijesti.
+
 
 ## 10. Brisanje uređaja i vlasništvo nad resursima
 

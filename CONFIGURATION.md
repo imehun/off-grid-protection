@@ -2,6 +2,29 @@
 
 Detailed configuration guide for OGP v1.2.1.
 
+## V1.3.0 release changes
+
+V1.3.0 adds the OGP Lovelace UI layer and the central Lovelace YAML
+generator without changing the existing protection lifecycle.
+
+- The main Lovelace card provides central status, recovery countdown,
+  device status and device Override controls.
+- Central Options provide **Central setup**, **Notifications** and
+  **Generate Lovelace YAML**.
+- The central Lovelace YAML generator produces one complete card
+  configuration from the current OGP central and device entries.
+- The central generator has no language selection. The generated card
+  provides English / Croatian UI dynamically.
+- Generated OGP helper entity IDs are resolved through the Home Assistant
+  Entity Registry, so renamed helper entities can be included correctly.
+- Custom Device Details displays the configured Control entity under
+  **Automations / entities**.
+- The Lovelace card is only a UI layer. Existing OGP protection,
+  shutdown, recovery and Override logic remains authoritative.
+
+The add/delete device workflow does not automatically regenerate the
+central Lovelace YAML in V1.3.0.
+
 ## V1.2.1 release changes
 
 V1.2.1 adds the following operational changes:
@@ -349,15 +372,106 @@ down and locked. The user must manually switch it OFF.
 
 Override is the intentional exception to reassertion.
 
-## 9. Generated Lovelace YAML
+## 9. Lovelace UI and generated YAML
 
-The generated Lovelace YAML is a starting template.
+V1.3.0 provides a main `custom:ogp-card` Lovelace card.
 
-It may use Browser Mod, Button-card and Stack-in-card, but these are not
-core OGP dependencies.
+The card configuration contains:
 
-Custom Device YAML may require user adaptation to the selected Device
-entity and desired interface.
+```yaml
+type: custom:ogp-card
+grid_status_entity: sensor.example_grid_status
+central_entry_id: <OGP central config entry ID>
+home_dashboard_path: /dashboard
+devices:
+  - name: "Example Device"
+    entity: climate.example
+    protection_status_entity: sensor.example_protection_status
+    locked_entity: binary_sensor.example_off_grid_protection_locked
+    override_duration_entity: number.example_override_duration
+    override_remaining_entity: sensor.example_override_remaining
+    override_pin_entity: text.example_override_pin
+```
+
+The device list is generated from the current OGP Device Entries.
+
+### 9.1 OGP.js installation
+
+The `OGP.js` file is the frontend Lovelace card used by `custom:ogp-card`.
+It must be installed separately from the Python integration files.
+
+1. Copy `OGP.js` to the Home Assistant `/config/www/` directory.
+2. Keep the filename as `OGP.js`.
+3. In Home Assistant, open **Settings → Dashboards → Resources**.
+4. Add the following resource:
+   - **URL:** `/local/OGP.js`
+   - **Resource type:** `JavaScript module`
+5. Save the resource and reload the Home Assistant frontend (a hard
+   browser refresh may be required).
+
+After installation, the card can be used with:
+
+```yaml
+type: custom:ogp-card
+```
+
+The `OGP.js` file is a Lovelace frontend component. It is not installed
+automatically by the OGP Python integration.
+
+### 9.2 Central Lovelace YAML generator
+
+Open the OGP central **Options** flow and select:
+
+**Generate Lovelace YAML**
+
+The generator creates the complete card YAML for the current central
+entry and all enabled OGP Device Entries belonging to it.
+
+There is no language selection in this generator. The generated card
+handles English and Croatian UI itself.
+
+The generator uses the Home Assistant Entity Registry to resolve OGP
+generated helper entities. This is important when a user has renamed an
+entity in Home Assistant. The original generated entity ID stored by OGP
+is used as the starting point, while the registry identifies the current
+entity ID.
+
+If an entity cannot be resolved unambiguously, the generator keeps the
+original generated ID rather than guessing another entity.
+
+### 9.3 Main card behavior
+
+The Lovelace card is a UI layer over the existing OGP backend.
+
+- Normal protection remains controlled by OGP.
+- Device manual ON / OFF controls are available only while the existing
+  device Override is active.
+- Central settings, reload and enable/disable actions use the existing
+  OGP/Home Assistant configuration mechanisms.
+- The card does not implement an alternative protection or recovery
+  algorithm.
+
+### 9.4 Device Details
+
+Device Details displays the configured Home Assistant entity and the OGP
+generated helper entities.
+
+For standard Climate and Switch devices, associated user automations are
+shown.
+
+For Custom Devices, the configured `control_entity_id` is shown as
+**Automations / entities** because it is the external control entity, not
+a list of OGP-managed user automations.
+
+### 9.4 Optional frontend components
+
+The generated Lovelace YAML is a starting template and may be adapted
+freely.
+
+Button-card and Stack-in-card are optional recommendations for the
+generated Override dashboard. Browser Mod is only relevant to Browser Mod
+popup notifications.
+
 
 ## 10. Device removal and resource ownership
 

@@ -1,5 +1,7 @@
 # OGP -- Off-grid Battery Protection
 
+**Trenutna verzija: v1.3.0**
+
 Prilagođena Home Assistant integracija za zaštitu **baterijskog sustava
 tijekom OFF-GRID rada**.
 
@@ -30,7 +32,10 @@ konfiguriranu radnju gašenja.
 -   Home Assistant obavijesti
 -   opcionalne Browser Mod popup obavijesti
 -   konfiguracija putem Config Flowa
--   opcionalni generirani Lovelace YAML
+-   glavni OGP Lovelace dashboard card
+-   centralni generator Lovelace YAML-a
+-   Entity Registry rezolucija preimenovanih generiranih entityja
+-   prikaz Custom Device Control entityja u Device Details
 -   engleski i hrvatski UI/dokumentacija
 -   podesivo OGP logiranje: Isključeno, Upozorenja ili Debug
 
@@ -179,12 +184,62 @@ različitim vrstama Home Assistant entityja.
 Huawei Solar **nije dependency OGP-a**. OGP ne uključuje, ne instalira
 niti distribuira izvorni kod Huawei Solar integracije.
 
+## Instalacija Lovelace frontenda
+
+### Instalacija Lovelace frontenda
+
+Frontend card `OGP.js` instalira se odvojeno od Python integracije:
+
+1. Kopirajte `OGP.js` u `/config/www/`.
+2. Dodajte `/local/OGP.js` u **Settings → Dashboards → Resources** kao
+   **JavaScript module**.
+3. Ponovno učitajte Home Assistant frontend.
+
+Detaljna Lovelace konfiguracija i generiranje YAML-a opisani su u
+`CONFIGURATION_hr.md`.
+
 ## Dokumentacija
 
 -   [`README.md`](README.md) --- pregled projekta
 -   [`README_hr.md`](README_hr.md) --- hrvatski pregled
 -   [`CONFIGURATION.md`](CONFIGURATION.md) --- detaljna konfiguracija
 -   [`CONFIGURATION_hr.md`](CONFIGURATION_hr.md) --- detaljne hrvatske upute
+
+## Promjene u V1.3.0
+
+**v1.3.0 --- Lovelace sučelje i konfiguracijski workflow**
+
+V1.3.0 dodaje kompletno početno Lovelace sučelje za OGP, dok postojeća
+backend protection, shutdown, recovery i Override logika ostaje
+nepromijenjena.
+
+-   **Glavni OGP Lovelace card:** centralni card prikazuje ON-GRID /
+    OFF-GRID status, status zaštite, recovery countdown i konfigurirane
+    OGP uređaje.
+-   **Centralne kontrole:** card omogućuje pristup Centralnim postavkama,
+    ponovnom učitavanju centrale i Enable / Disable centrale.
+-   **Kontrole uređaja:** svaki uređaj prikazuje status zaštite i stvarni
+    Home Assistant entity status. Ručno ON / OFF upravljanje dostupno je
+    samo dok je aktivan postojeći OGP Override tog uređaja.
+-   **Opcije uređaja:** iz carda su dostupni Postavke, Ponovno učitaj
+    uređaj i Detalji uređaja.
+-   **Centralni Options izbornik:** OGP centralne Options sada nude
+    Centralne postavke, Obavijesti i Generiranje Lovelace YAML-a.
+-   **Generator glavnog Lovelace YAML-a:** generira kompletnu
+    konfiguraciju OGP carda iz trenutno konfigurirane centrale i Device
+    Entryja. Centralni generator ne traži odabir jezika; sam card
+    dinamički podržava hrvatski i engleski.
+-   **Preimenovani generirani entityji:** centralni generator koristi
+    Home Assistant Entity Registry kako bi pronašao stvarne entity ID-e
+    OGP helpera, čak i kada ih je korisnik ručno preimenovao.
+-   **Custom Device detalji:** kod Custom Devicea konfigurirani Control
+    entity prikazuje se u Device Details kao **Automatizacije / entities**,
+    a ne kao obična lista automatizacija.
+-   **Lovelace je samo UI sloj:** Lovelace card ne zamjenjuje niti mijenja
+    OGP lifecycle zaštite. Backend OGP i dalje je autoritativan.
+
+Workflow automatskog ponovnog generiranja glavnog Lovelace YAML-a nakon
+dodavanja ili brisanja uređaja nije uključen u ovu verziju.
 
 ## Promjene u V1.2.1
 

@@ -13,6 +13,7 @@ from homeassistant.const import CONF_NAME
 from homeassistant.components import persistent_notification
 from homeassistant.core import callback
 from homeassistant.helpers import selector
+from homeassistant.helpers import entity_registry as er
 from homeassistant.util import slugify
 
 from . import DOMAIN
@@ -27,6 +28,203 @@ from .notifications import (
     get_browser_mod_device_options,
     _load_notification_texts,
 )
+
+
+def _yaml_string(value: str) -> str:
+    """Return a JSON-quoted string, which is also valid YAML."""
+    import json
+    return json.dumps(str(value), ensure_ascii=False)
+
+
+def _current_ogp_entity_id(
+    hass,
+    device_entry,
+    generated_entity_id: str,
+    role: str,
+) -> str:
+    """Resolve the current entity ID for one OGP generated entity.
+
+    The entity ID stored in ``generated_resources`` is only the original
+    generated ID. Home Assistant allows the user to rename an entity, so the
+    Lovelace generator must resolve the entity through the Entity Registry.
+
+    The Config Entry is the primary boundary: only entities belonging to
+    this OGP device entry are considered.  The generated ID is preferred;
+    when it was renamed, role-specific registry information is used to find
+    the renamed entity.
+    """
+    registry = er.async_get(hass)
+
+    # 1. Normal case: the generated entity was never renamed.
+    exact = registry.async_get(generated_entity_id)
+    if exact is not None and exact.config_entry_id == device_entry.entry_id:
+        return exact.entity_id
+
+    domain = generated_entity_id.split(".", 1)[0]
+
+    # 2. Only inspect entities owned by this OGP device Config Entry.
+    candidates = [
+        entity
+        for entity in registry.entities.values()
+        if entity.config_entry_id == device_entry.entry_id
+        and entity.entity_id.split(".", 1)[0] == domain
+    ]
+
+    if not candidates:
+        return generated_entity_id
+
+    # 3. Role-specific scoring.  unique_id normally keeps the original OGP
+    # role even after an entity_id rename. original_name also covers renamed
+    # entities such as ``Status zaštite``.
+    role_terms = {
+        "locked": (
+            "off_grid_protection_locked",
+            "protection_locked",
+            "locked",
+            "zakljuc",
+            "zaključ",
+            "blok",
+        ),
+        "duration": (
+            "override_duration",
+            "duration",
+            "trajanje",
+            "vrijeme",
+            "minute",
+        ),
+        "remaining": (
+            "override_remaining",
+            "remaining",
+            "preost",
+            "remaining_time",
+            "preostalo",
+        ),
+        "protection": (
+            "protection_status",
+            "status_protection",
+            "protection",
+            "zaštit",
+            "zastit",
+            "status zaštite",
+            "status_zastite",
+        ),
+        "pin": (
+            "override_pin",
+            "pin",
+            "override",
+        ),
+    }
+
+    terms = role_terms.get(role, (role,))
+    ranked: list[tuple[int, str]] = []
+
+    for entity in candidates:
+        haystack = " ".join(
+            str(value or "").casefold()
+            for value in (
+                entity.unique_id,
+                entity.original_name,
+                entity.entity_id,
+            )
+        )
+        score = 0
+        for term in terms:
+            term_cf = term.casefold()
+            if term_cf in haystack:
+                # Unique ID is the strongest evidence, followed by the
+                # original name and finally the current entity ID.
+                if term_cf in str(entity.unique_id or "").casefold():
+                    score += 100
+                elif term_cf in str(entity.original_name or "").casefold():
+                    score += 50
+                else:
+                    score += 10
+
+        if score:
+            ranked.append((score, entity.entity_id))
+
+    if ranked:
+        ranked.sort(key=lambda item: (-item[0], item[1]))
+        best_score = ranked[0][0]
+        best = [entity_id for score, entity_id in ranked if score == best_score]
+        if len(best) == 1:
+            return best[0]
+
+    # No unambiguous renamed entity was found. Keep the original generated
+    # ID rather than guessing and potentially wiring Lovelace to another
+    # entity.
+    return generated_entity_id
+
+
+def _generate_full_lovelace_yaml(hass, central_entry_id: str) -> str:
+    """Generate the complete OGP Lovelace card YAML for one central entry."""
+    central_entry = hass.config_entries.async_get_entry(central_entry_id)
+    if central_entry is None:
+        raise ValueError("OGP central config entry not found")
+
+    central = central_entry.data.get("central", {})
+    grid_entity = central.get("inverter_off_grid_status")
+    if not grid_entity:
+        raise ValueError("OGP central grid status entity is not configured")
+
+    devices = []
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        if entry.data.get("type") != "device":
+            continue
+        if entry.data.get("central_entry_id") != central_entry_id:
+            continue
+        if entry.disabled_by is not None:
+            continue
+
+        device = entry.data.get("device", {})
+        name = device.get("name") or entry.title
+        entity_id = device.get("entity_id") or device.get("type_config", {}).get("entity_id")
+        if not name or not entity_id:
+            continue
+
+        generated = device.get("generated_resources", {}).get("entities", [])
+        by_role = {}
+        for role, suffix in (
+            ("locked", "_off_grid_protection_locked"),
+            ("duration", "_override_duration"),
+            ("remaining", "_override_remaining"),
+            ("protection", "_protection_status"),
+            ("pin", "_override_pin"),
+        ):
+            original = next(
+                (item for item in generated if str(item).endswith(suffix)),
+                None,
+            )
+            if original:
+                by_role[role] = _current_ogp_entity_id(
+                    hass, entry, original, role
+                )
+
+        devices.append((str(name), str(entity_id), by_role))
+
+    lines = [
+        "type: custom:ogp-card",
+        f"grid_status_entity: {grid_entity}",
+        f"central_entry_id: {central_entry_id}",
+        "home_dashboard_path: /dashboard",
+        "devices:",
+    ]
+
+    for name, entity_id, entities in devices:
+        lines.append(f"  - name: {_yaml_string(name)}")
+        lines.append(f"    entity: {entity_id}")
+        if entities.get("protection"):
+            lines.append(f"    protection_status_entity: {entities['protection']}")
+        if entities.get("locked"):
+            lines.append(f"    locked_entity: {entities['locked']}")
+        if entities.get("duration"):
+            lines.append(f"    override_duration_entity: {entities['duration']}")
+        if entities.get("remaining"):
+            lines.append(f"    override_remaining_entity: {entities['remaining']}")
+        if entities.get("pin"):
+            lines.append(f"    override_pin_entity: {entities['pin']}")
+
+    return "\n".join(lines) + "\n"
 
 
 def _get_automation_options(
@@ -1545,19 +1743,48 @@ class OffGridProtectionOptionsFlow(
                 return await self.async_step_central()
             if user_input["section"] == "notifications":
                 return await self.async_step_notification_list()
+            if user_input["section"] == "generate_lovelace_yaml":
+                return await self.async_step_generate_full_lovelace_yaml()
 
+        hr = self.hass.config.language.startswith("hr")
+        options = [
+            {"value": "central", "label": "Centralna postavka" if hr else "Central setup"},
+            {"value": "notifications", "label": "Obavijesti" if hr else "Notifications"},
+            {"value": "generate_lovelace_yaml", "label": "Generiraj Lovelace YAML" if hr else "Generate Lovelace YAML"},
+        ]
         return self.async_show_form(
             step_id="init",
             data_schema=vol.Schema({
                 vol.Required("section", default="central"): selector.SelectSelector(
                     selector.SelectSelectorConfig(
-                        options=["central", "notifications"],
+                        options=options,
                         mode=selector.SelectSelectorMode.LIST,
-                        translation_key="configuration_section",
                     )
                 )
             }),
         )
+
+    async def async_step_generate_full_lovelace_yaml(self, user_input=None):
+        """Generate the complete central Lovelace YAML without language selection."""
+        try:
+            yaml_text = _generate_full_lovelace_yaml(
+                self.hass, self.config_entry.entry_id
+            )
+            persistent_notification.async_create(
+                self.hass,
+                message=f"<pre>{yaml_text}</pre>",
+                title="OGP – Lovelace YAML",
+                notification_id="off_grid_full_lovelace_yaml",
+            )
+            return self.async_create_entry(title="", data={})
+        except Exception as err:
+            persistent_notification.async_create(
+                self.hass,
+                message=f"OGP Lovelace YAML generation failed: {err}",
+                title="OGP – Lovelace YAML",
+                notification_id="off_grid_full_lovelace_yaml_error",
+            )
+            return self.async_abort(reason="lovelace_yaml_generation_failed")
 
     async def async_step_notification_list(self, user_input=None):
         """Show the notification list and allow adding or managing one."""

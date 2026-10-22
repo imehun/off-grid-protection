@@ -1,5 +1,5 @@
 /* OGP.js
- * OGP V1.3.0 - Lovelace main card
+ * OGP V1.4.0 - Lovelace main card
  *
  * Step 2: Devices
  *
@@ -10,7 +10,7 @@
  *
  * type: custom:ogp-card
  * grid_status_entity: input_select.ogp_test_grid_status
- * home_dashboard_path: /dashboard
+ * home_dashboard_path: /config/integrations/integration/off_grid_protection
  * devices:
  *   - name: Heat Pump
  *     entity: climate.example
@@ -18,14 +18,12 @@
  *     locked_entity: binary_sensor.heat_pump_off_grid_protection_locked
  *     override_duration_entity: number.heat_pump_override_duration
  *     override_remaining_entity: sensor.heat_pump_override_remaining
- *     override_pin_entity: text.heat_pump_override_pin
  *   - name: Water Heater
  *     entity: switch.example
  *     protection_status_entity: sensor.water_heater_protection_status
  *     locked_entity: binary_sensor.water_heater_off_grid_protection_locked
  *     override_duration_entity: number.water_heater_override_duration
  *     override_remaining_entity: sensor.water_heater_override_remaining
- *     override_pin_entity: text.water_heater_override_pin
  *
  * The final OGP integration will generate this YAML.
  */
@@ -46,7 +44,10 @@ class OGPCard extends HTMLElement {
     this._openDeviceId = null;
     this._overrideDevice = null;
     this._overrideDuration = null;
-    this._overridePin = "";
+
+    // Smooth local display while the Override Remaining sensor updates periodically.
+    this._overrideCountdowns = new Map();
+    this._overrideCountdownTimer = null;
   }
 
   setConfig(config) {
@@ -88,6 +89,62 @@ class OGPCard extends HTMLElement {
 
   disconnectedCallback() {
     this._stopRecoveryTimer();
+    this._stopOverrideCountdownTimer();
+  }
+
+  _stopOverrideCountdownTimer() {
+    if (this._overrideCountdownTimer !== null) {
+      clearInterval(this._overrideCountdownTimer);
+      this._overrideCountdownTimer = null;
+    }
+  }
+
+  _ensureOverrideCountdownTimer() {
+    if (this._overrideCountdownTimer !== null) return;
+    this._overrideCountdownTimer = setInterval(() => {
+      if (!this.isConnected) {
+        this._stopOverrideCountdownTimer();
+        return;
+      }
+      this._render();
+    }, 1000);
+  }
+
+  _overrideCountdown(device) {
+    const entityId = device.override_remaining_entity;
+    if (!entityId || !this._hass) return "—";
+    const entity = this._hass.states[entityId];
+    if (!entity) return "—";
+
+    const raw = String(entity.state ?? "").trim();
+    const match = raw.match(/^(?:(\d+):)?(\d{1,2}):(\d{2})$/);
+    let seconds;
+    if (match) {
+      seconds = Number(match[1] || 0) * 3600 + Number(match[2]) * 60 + Number(match[3]);
+    } else if (/^\d+(?:\.\d+)?$/.test(raw)) {
+      seconds = Math.max(0, Math.ceil(Number(raw)));
+    } else {
+      this._overrideCountdowns.delete(entityId);
+      return raw || "—";
+    }
+
+    const now = Date.now();
+    const last = this._overrideCountdowns.get(entityId);
+    // Rebase when HA publishes a new sensor state; tick locally in between.
+    if (!last || last.raw !== raw || last.lastUpdated !== entity.last_updated) {
+      this._overrideCountdowns.set(entityId, {
+        raw,
+        lastUpdated: entity.last_updated,
+        receivedAt: now,
+        seconds,
+      });
+    }
+    const current = this._overrideCountdowns.get(entityId);
+    const remaining = Math.max(0, current.seconds - Math.floor((now - current.receivedAt) / 1000));
+    this._ensureOverrideCountdownTimer();
+    const minutes = Math.floor(remaining / 60);
+    const secs = remaining % 60;
+    return `${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
   }
 
 
@@ -103,14 +160,12 @@ class OGPCard extends HTMLElement {
 
   _openOverride(device) {
     this._overrideDevice = device;
-    this._overridePin = "";
     this._overrideDuration = this._defaultOverrideDuration(device);
     this._render();
   }
 
   _closeOverride() {
     this._overrideDevice = null;
-    this._overridePin = "";
     this._overrideDuration = null;
     this._render();
   }
@@ -141,7 +196,7 @@ class OGPCard extends HTMLElement {
   _setOverrideDuration(value) {
     this._overrideDuration = Number(value);
 
-    // Update only the duration buttons; keep the dialog and PIN focus intact.
+    // Update only the duration buttons without re-rendering the dialog.
     this.shadowRoot
       ?.querySelectorAll("[data-duration]")
       .forEach(button => {
@@ -152,21 +207,12 @@ class OGPCard extends HTMLElement {
       });
   }
 
-  _setOverridePin(value) {
-    // Do NOT re-render the card while typing the PIN.
-    // Re-rendering destroys the input element and therefore its focus.
-    this._overridePin = String(value ?? "")
-      .replace(/\D/g, "")
-      .slice(0, 4);
-  }
-
   async _activateOverride(device) {
     if (!this._hass) return;
 
-    const pin = String(this._overridePin || "");
     const duration = Number(this._overrideDuration);
 
-    if (!/^\d{4}$/.test(pin) || !Number.isFinite(duration)) return;
+    if (!Number.isFinite(duration)) return;
 
     // The duration helper is an existing OGP entity.
     if (device.override_duration_entity) {
@@ -182,7 +228,6 @@ class OGPCard extends HTMLElement {
       "request_override",
       {
         device_id: device.name || device.entity || device.id,
-        pin: pin,
       }
     );
 
@@ -209,69 +254,31 @@ class OGPCard extends HTMLElement {
     if (!device) return "";
 
     const limits = this._overrideLimits(device);
-    const current = Number(
-      this._overrideDuration ?? limits.min
-    );
-
+    const current = Number(this._overrideDuration ?? limits.min);
     const presets = [5, 15, 30, 60]
       .filter(value => value >= limits.min && value <= limits.max)
       .map(value => `
-        <button
-          class="duration ${value === current ? "selected" : ""}"
-          data-duration="${value}">
+        <button class="duration ${value === current ? "selected" : ""}" data-duration="${value}">
           ${value < 60 ? `${value} min` : "1 h"}
-        </button>
-      `)
-      .join("");
+        </button>`).join("");
 
     return `
       <div class="modal-backdrop">
         <div class="override-dialog">
           <div class="dialog-header">
             <div>
-              <div class="dialog-title">Enter Override PIN</div>
-              <div class="dialog-subtitle">
-                Enter your override PIN to activate manual control.
-              </div>
+              <div class="dialog-title">Start Override</div>
+              <div class="dialog-subtitle">Select override duration</div>
             </div>
             <button class="close-button" id="close-override">×</button>
           </div>
-
-          <div class="pin-row">
-            ${[0, 1, 2, 3].map(index => `
-              <input
-                class="pin-input"
-                type="password"
-                inputmode="numeric"
-                maxlength="1"
-                data-pin-index="${index}"
-                value="${this._escape(this._overridePin[index] || "")}">
-            `).join("")}
-          </div>
-
-          <div class="duration-title">Select override duration</div>
-
           <div class="duration-grid">
-            ${presets || `
-              <div class="duration-info">
-                ${this._escape(`${limits.min}–${limits.max} min`)}
-              </div>
-            `}
+            ${presets || `<div class="duration-info">${this._escape(`${limits.min}–${limits.max} min`)}</div>`}
           </div>
-
-          <button
-            class="activate-button"
-            id="activate-override"
-            ${/^\d{4}$/.test(this._overridePin) ? "" : "disabled"}>
-            ▶ Activate Override
-          </button>
-
-          <button class="cancel-button" id="cancel-override">
-            Cancel
-          </button>
+          <button class="activate-button" id="activate-override">▶ Start Override</button>
+          <button class="cancel-button" id="cancel-override">Cancel</button>
         </div>
-      </div>
-    `;
+      </div>`;
   }
 
   _attachDeviceHandlers() {
@@ -317,7 +324,6 @@ class OGPCard extends HTMLElement {
       device.locked_entity,
       device.override_remaining_entity,
       device.override_duration_entity,
-      device.override_pin_entity,
     ].filter(Boolean);
 
     let configEntryId = null;
@@ -588,15 +594,12 @@ class OGPCard extends HTMLElement {
             recovery_timeout: "Timeout oporavak",
             command_timeout: "Timeout naredbe",
             override_enabled: "Omogući Override",
-            require_pin: "Zahtijevaj PIN",
             minimum_runtime: "Minimalno trajanje",
             maximum_runtime: "Maksimalno trajanje",
             automations: "Automatizacije",
             inverter_off_grid_status: "Status off-grid invertera",
             power_meter_status: "Status mjerača snage",
             recovery_delay: "Odgoda oporavka",
-            central_pin: "Centralni PIN",
-            pin_check: "Provjera PIN-a",
             recovery_enabled: "Automatski oporavak",
             logs: "Logovi",
             notifications_enabled: "Omogući obavijesti",
@@ -626,7 +629,6 @@ class OGPCard extends HTMLElement {
             recovery_timeout: "Recovery timeout",
             command_timeout: "Command timeout",
             override_enabled: "Enable Override",
-            require_pin: "Require PIN",
             minimum_runtime: "Minimum duration",
             maximum_runtime: "Maximum duration",
             automations: "Automations",
@@ -638,12 +640,9 @@ class OGPCard extends HTMLElement {
             show_all_automations: "Show all automations",
             wait_for_unavailable: "Wait if unavailable",
             override_enabled: "Enable Override",
-            require_pin: "Require PIN",
             inverter_off_grid_status: "Inverter Off-grid Status",
             power_meter_status: "Power Meter Status",
             recovery_delay: "Recovery delay",
-            central_pin: "Central PIN",
-            pin_check: "PIN check",
             recovery_enabled: "Recovery enabled",
             logs: "Logs",
             notifications_enabled: "Enable notifications",
@@ -1088,6 +1087,20 @@ class OGPCard extends HTMLElement {
     return null;
   }
 
+  _navigateOGPIntegration() {
+    const path = "/config/integrations/integration/off_grid_protection";
+    try {
+      if (this._hass?.navigate) {
+        this._hass.navigate(path);
+        return;
+      }
+    } catch (err) {
+      console.warn("OGP: unable to navigate to integration settings", err);
+    }
+    window.history.pushState({}, "", path);
+    window.dispatchEvent(new Event("location-changed"));
+  }
+
   async _openOGPCentralSettings() {
     if (!this._hass) return;
 
@@ -1274,7 +1287,6 @@ class OGPCard extends HTMLElement {
       device.locked_entity,
       device.override_remaining_entity,
       device.override_duration_entity,
-      device.override_pin_entity,
     ].filter(Boolean);
 
     for (const entityId of candidates) {
@@ -1516,7 +1528,6 @@ class OGPCard extends HTMLElement {
       device.override_duration_entity,
       device.override_remaining_entity,
       device.protection_status_entity,
-      device.override_pin_entity,
     ].filter(Boolean).filter((entityId, index, list) => list.indexOf(entityId) === index);
 
     this._closeDeviceDetailsDialog();
@@ -1713,7 +1724,6 @@ class OGPCard extends HTMLElement {
       device.locked_entity,
       device.override_remaining_entity,
       device.override_duration_entity,
-      device.override_pin_entity,
     ].filter(Boolean);
 
     let configEntryId = null;
@@ -1784,7 +1794,7 @@ class OGPCard extends HTMLElement {
   }
 
   _navigateHomeDashboard() {
-    const path = String(this._config.home_dashboard_path || "/dashboard").trim() || "/dashboard";
+    const path = String(this._config.home_dashboard_path || "/config/integrations/integration/off_grid_protection").trim() || "/config/integrations/integration/off_grid_protection";
     try {
       if (this._hass?.navigate) {
         this._hass.navigate(path);
@@ -1838,7 +1848,6 @@ class OGPCard extends HTMLElement {
         '[data-action="central-settings"], ' +
         '[data-action="central-reload"], ' +
         '[data-action="central-enable-disable"], ' +
-        '[data-action="device-settings"], ' +
         '[data-action="device-reload"], ' +
         '[data-action="device-enable-disable"], ' +
         '[data-action="device-details"]'
@@ -1858,7 +1867,7 @@ class OGPCard extends HTMLElement {
           }
 
           if (button.dataset.action === "central-settings") {
-            await this._openOGPCentralSettings();
+            this._navigateOGPIntegration();
             return;
           }
 
@@ -1873,11 +1882,6 @@ class OGPCard extends HTMLElement {
           }
 
           if (!device) return;
-
-          if (button.dataset.action === "device-settings") {
-            this._openHADeviceSettings(device);
-            return;
-          }
 
           if (button.dataset.action === "device-reload") {
             await this._reloadOGPDevice(device);
@@ -1916,46 +1920,6 @@ class OGPCard extends HTMLElement {
         });
       });
 
-    const inputs = [
-      ...this.shadowRoot.querySelectorAll(".pin-input"),
-    ];
-
-    inputs.forEach(input => {
-      input.addEventListener("input", event => {
-        const index = Number(event.target.dataset.pinIndex);
-        const digit = String(event.target.value || "")
-          .replace(/\D/g, "")
-          .slice(-1);
-
-        const chars = ["", "", "", ""];
-        for (let i = 0; i < 4; i++) {
-          chars[i] = this._overridePin[i] || "";
-        }
-        chars[index] = digit;
-
-        this._setOverridePin(chars.join(""));
-
-        const activateButton =
-          this.shadowRoot.querySelector("#activate-override");
-
-        if (activateButton) {
-          activateButton.disabled = !/^\d{4}$/.test(
-            this._overridePin
-          );
-        }
-
-        if (digit && inputs[index + 1]) {
-          inputs[index + 1].focus();
-        }
-      });
-
-      input.addEventListener("keydown", event => {
-        if (event.key === "Backspace" && !input.value) {
-          const index = Number(input.dataset.pinIndex);
-          if (inputs[index - 1]) inputs[index - 1].focus();
-        }
-      });
-    });
 
     this.shadowRoot
       .querySelector("#activate-override")
@@ -1963,7 +1927,6 @@ class OGPCard extends HTMLElement {
         this._activateOverride(this._overrideDevice);
       });
 
-    inputs[0]?.focus();
   }
 
   getCardSize() {
@@ -1984,7 +1947,20 @@ class OGPCard extends HTMLElement {
   _startRecovery() {
     this._stopRecoveryTimer();
 
-    this._recoveryEnd = Date.now() + 60 * 1000;
+    // Use the recovery delay supplied by the OGP YAML generator.
+    // This is the same central setting used by the integration.
+    const configuredDelay = Number(this._config.recovery_delay);
+    const delaySeconds = Number.isFinite(configuredDelay) && configuredDelay >= 0
+      ? configuredDelay
+      : 0;
+
+    if (delaySeconds === 0) {
+      this._recoveryEnd = null;
+      this._render();
+      return;
+    }
+
+    this._recoveryEnd = Date.now() + delaySeconds * 1000;
     this._updateRecovery();
 
     this._recoveryTimer = setInterval(() => {
@@ -2224,9 +2200,7 @@ class OGPCard extends HTMLElement {
 
               <div class="device-name">
                 <div class="name">${this._escape(name)}</div>
-                <div class="entity">
-                  ${this._escape(device.entity || "—")}
-                </div>
+
               </div>
             </div>
 
@@ -2259,12 +2233,7 @@ class OGPCard extends HTMLElement {
               <div class="override-countdown">
                 <span>Override countdown</span>
                 <strong>
-                  ${this._escape(
-                    this._state(
-                      device.override_remaining_entity,
-                      "—"
-                    )
-                  )}
+                  ${this._escape(this._overrideCountdown(device))}
                 </strong>
               </div>
 
@@ -2298,25 +2267,7 @@ class OGPCard extends HTMLElement {
               ` : ""}
 
               <div class="device-options">
-                <div class="device-options-title">${
-                  ((this._hass?.locale?.language || this._hass?.language || "en")
-                    .toLowerCase().startsWith("hr"))
-                    ? "Opcije uređaja"
-                    : "Device Options"
-                }</div>
-
-                <button class="option-button" data-action="device-settings"
-                  data-device-id="${this._escape(id)}">
-                  <span class="option-icon">⚙</span>
-                  <span>${
-                    ((this._hass?.locale?.language || this._hass?.language || "en")
-                      .toLowerCase().startsWith("hr"))
-                      ? "Postavke"
-                      : "Settings"
-                  }</span>
-                  <span class="option-arrow">›</span>
-                </button>
-
+                
                 <button class="option-button" data-action="device-reload"
                   data-device-id="${this._escape(id)}">
                   <span class="option-icon">↻</span>
@@ -2365,7 +2316,7 @@ class OGPCard extends HTMLElement {
 
     // Keep the Override dialog DOM alive while it is open.
     // HA state updates can arrive frequently; rebuilding the dialog would
-    // destroy the focused PIN input and make typing feel broken.
+    // destroy the active dialog and make interaction feel broken.
     if (
       this._overrideDevice &&
       this.shadowRoot.querySelector(".modal-backdrop")
@@ -2426,10 +2377,15 @@ class OGPCard extends HTMLElement {
 
         ha-card {
           overflow: hidden;
-          background: var(
-            --ha-card-background,
-            var(--card-background-color, var(--primary-background-color))
-          );
+          color: #e6f1ff;
+          background: #061724;
+          border: 1px solid #123b55;
+          border-radius: 16px;
+          --primary-text-color: #e6f1ff;
+          --secondary-text-color: #a8c2d8;
+          --divider-color: #123b55;
+          --card-background-color: #081d2d;
+          --secondary-background-color: #10283a;
         }
 
         .ogp {
@@ -2556,8 +2512,9 @@ class OGPCard extends HTMLElement {
           padding: 7px 16px 7px 10px;
           border: 1px solid var(--divider-color);
           border-radius: 12px;
-          background: var(--card-background-color);
-          color: var(--primary-text-color);
+          background: #0a2031;
+          color: #e6f1ff;
+          border-color: #16415e;
           font: inherit;
           font-size: .82rem;
           font-weight: 400;
@@ -2610,8 +2567,9 @@ class OGPCard extends HTMLElement {
           padding: 7px 12px;
           border: 1px solid var(--divider-color);
           border-radius: 9px;
-          background: var(--card-background-color);
-          color: var(--primary-text-color);
+          background: #0a2031;
+          color: #e6f1ff;
+          border-color: #16415e;
           font: inherit;
           font-size: .82rem;
           cursor: pointer;
@@ -3037,25 +2995,6 @@ class OGPCard extends HTMLElement {
           cursor: pointer;
         }
 
-        .pin-row {
-          display: flex;
-          justify-content: center;
-          gap: 10px;
-          margin: 22px 0;
-        }
-
-        .pin-input {
-          width: 48px;
-          height: 52px;
-          box-sizing: border-box;
-          text-align: center;
-          font-size: 1.35rem;
-          border: 1px solid var(--divider-color);
-          border-radius: 9px;
-          background: var(--secondary-background-color);
-          color: var(--primary-text-color);
-        }
-
         .duration-title {
           margin-bottom: 10px;
           color: var(--secondary-text-color);
@@ -3104,6 +3043,30 @@ class OGPCard extends HTMLElement {
           cursor: pointer;
           font: inherit;
         }
+
+
+        .device-row, .device-details, .override-header, .override-countdown,
+        .option-button, .central-control-button, .override-dialog {
+          background: #081d2d;
+          color: #e6f1ff;
+          border-color: #16415e;
+        }
+        .device-row:hover, .option-button:hover, .central-control-button:hover {
+          background: #0d2a40;
+        }
+        .device-block { border-color: #16415e; }
+        .device-icon, .status-icon, .home-dashboard-icon {
+          background: #0d2b40;
+          color: #00b7ff;
+        }
+        .override-action, .activate-button {
+          background: #0b4a70;
+          border: 1px solid #00aeef;
+          color: #f2f9ff;
+        }
+        .duration { background: #0b2538; color: #d8eaff; border-color: #16415e; }
+        .duration.selected { background: #07517a; border-color: #00b7ff; }
+        .cancel-button { color: #d8eaff; }
 
         .empty {
           padding: 22px 14px;
@@ -3221,7 +3184,6 @@ class OGPCard extends HTMLElement {
                   <path d="M9.5 21v-6h5v6"/>
                 </svg>
               </span>
-              <span class="home-dashboard-text">${((this._hass?.locale?.language || this._hass?.language || "en").toLowerCase().startsWith("hr")) ? "Povratak na početnu HA stranicu" : "Back to HA default dashboard"}</span>
             </button>
 
             <div class="central-controls-right">

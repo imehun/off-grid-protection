@@ -1,7 +1,5 @@
 MIT LICENCA
 
-Autorsko pravo (c) 2026 Igor M.
-
 Ovim se bez naknade daje dopuštenje svakoj osobi koja dobije kopiju ovog
 softvera i pripadajućih dokumentacijskih datoteka ("Softver") da bez
 ograničenja postupa sa Softverom, uključujući, bez ograničenja, prava na

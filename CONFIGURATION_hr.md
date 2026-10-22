@@ -1,6 +1,27 @@
 # OGP --- Upute za konfiguraciju
 
-Detaljne upute za konfiguraciju OGP-a v1.2.1.
+Detaljne upute za konfiguraciju OGP-a v1.4.0.
+
+## Promjene u V1.4.0
+
+V1.4.0 ažurira izgled Lovelace carda i pojednostavljuje kontrole bez
+promjene OGP zaštitne logike.
+
+- Glavni `custom:ogp-card` koristi tamni vizualni stil.
+- Uklonjena je zasebna opcija Device Settings. Ostaju Device Details,
+  Reload Device i Enable / Disable Device.
+- Povratak na Home Assistant dashboard prikazuje samo ikonu.
+- Centralne postavke otvaraju standardnu Home Assistant putanju OGP
+  integracije.
+- ON-GRID recovery countdown koristi podešeni `recovery_delay` koji
+  integracija prosljeđuje generiranim YAML-om, umjesto fiksne minute.
+- Override countdown prikazuje se s osvježavanjem svake sekunde, uz
+  usklađivanje sa stanjem integracije.
+- Centralni YAML generator i dalje generira konfigurirani
+  `home_dashboard_path`; putanja Central settings neovisna je o tome.
+
+OGP backend i dalje je autoritativan za zaštitu, gašenje, recovery i
+Override ponašanje.
 
 ## Promjene u V1.3.0
 
@@ -41,24 +62,9 @@ V1.2.1 donosi sljedeće operativne promjene:
 Protection, shutdown, recovery i Override logika ostaju nepromijenjene
 u odnosu na V1.2.0.
 
+## 1. Zahtjevi
 
-## 1. Zahtjevi i opcionalne komponente
-
-Za osnovnu konfiguraciju i zaštitnu funkcionalnost OGP-a nisu potrebni
-Huawei Solar, Browser Mod, Button-card niti Stack-in-card.
-
-Opcionalne komponente:
-
--   **Browser Mod** --- samo za Browser Mod popup obavijesti.
--   **Button-card** --- preporučuje se za generirano Override dashboard
-    sučelje.
--   **Stack-in-card** --- preporučuje se za generirano Override
-    dashboard sučelje.
-
-Home Assistant obavijesti ne zahtijevaju Browser Mod.
-
-Generirani Lovelace YAML je pomoćni predložak. Nije dependency OGP-a i
-korisnik ga može slobodno mijenjati.
+Za osnovnu konfiguraciju i zaštitnu funkcionalnost OGP-a nisu potrebne dodatne frontend card komponente. Generirani Lovelace YAML je predložak koji se može prilagoditi.
 
 ## 2. Model zaštite
 
@@ -146,7 +152,6 @@ odabire se:
 -   jezik obavijesti (**Hrvatski** ili **English**).
 
 Globalna obavijest uvijek koristi ugrađenu Home Assistant uslugu
-`persistent_notification`. Ne koristi Browser Mod i ne zahtijeva odabir
 notification odredišta.
 
 #### Obavijest prema uređaju
@@ -155,7 +160,6 @@ Može postojati više obavijesti prema uređaju. Svaki profil ima vlastito
 odredište, odabir događaja i jezik. Vrsta odredišta može biti:
 
 -   **Notify** --- jedno Home Assistant notification odredište;
--   **Browser Mod** --- jedan Browser Mod uređaj.
 
 Za svaki profil zasebno mogu se odabrati Status mreže, Zaštita / Override
 i Sigurnost te Hrvatski ili English jezik.
@@ -309,7 +313,6 @@ Može koristiti:
 -   minimalno trajanje;
 -   maksimalno trajanje;
 -   traženo trajanje;
--   PIN zaštitu.
 
 Override ne uključuje automatski uređaj. Korisnik odlučuje hoće li ga
 stvarno uključiti.
@@ -374,7 +377,7 @@ Override je namjerna iznimka od safety reassertiona.
 
 ## 9. Lovelace UI i generirani YAML
 
-V1.3.0 donosi glavni `custom:ogp-card` Lovelace card.
+V1.4.0 donosi ažurirani glavni `custom:ogp-card` Lovelace card.
 
 Konfiguracija carda sadrži:
 
@@ -382,7 +385,7 @@ Konfiguracija carda sadrži:
 type: custom:ogp-card
 grid_status_entity: sensor.example_grid_status
 central_entry_id: <ID centralnog OGP config entryja>
-home_dashboard_path: /dashboard
+home_dashboard_path: /config/integrations/integration/off_grid_protection
 devices:
   - name: "Primjer uređaja"
     entity: climate.example
@@ -390,7 +393,6 @@ devices:
     locked_entity: binary_sensor.example_off_grid_protection_locked
     override_duration_entity: number.example_override_duration
     override_remaining_entity: sensor.example_override_remaining
-    override_pin_entity: text.example_override_pin
 ```
 
 Lista uređaja generira se iz trenutno konfiguriranih OGP Device Entryja.
@@ -446,8 +448,8 @@ Lovelace card je UI sloj iznad postojeće OGP backend logike.
 - Normalnom zaštitom i dalje upravlja OGP.
 - Ručne ON / OFF kontrole uređaja dostupne su samo dok je aktivan
   postojeći Override uređaja.
-- Centralne postavke, reload i enable/disable koriste postojeće
-  OGP/Home Assistant mehanizme.
+- Centralne postavke otvaraju standardnu putanju OGP integracije; reload
+  i enable/disable koriste postojeće OGP/Home Assistant mehanizme.
 - Card ne implementira alternativni algoritam zaštite ili recoveryja.
 
 ### 9.4 Device Details
@@ -461,16 +463,6 @@ automatizacije.
 Kod Custom Devicea konfigurirani `control_entity_id` prikazuje se kao
 **Automatizacije / entities**, jer je riječ o vanjskom Control entityju,
 a ne o listi OGP-om upravljanih korisničkih automatizacija.
-
-### 9.4 Opcionalne frontend komponente
-
-Generirani Lovelace YAML je početni predložak i može se slobodno
-prilagoditi.
-
-Button-card i Stack-in-card su opcionalna preporuka za generirani
-Override dashboard. Browser Mod je relevantan samo za Browser Mod popup
-obavijesti.
-
 
 ## 10. Brisanje uređaja i vlasništvo nad resursima
 

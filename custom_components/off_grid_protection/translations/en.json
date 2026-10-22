@@ -104,7 +104,6 @@
         "description": "Configure the override behavior for this device.",
         "data": {
           "override_enabled": "Enable override",
-          "require_pin": "Require PIN",
           "minimum_runtime": "Minimum runtime",
           "maximum_runtime": "Maximum runtime"
         }
@@ -128,10 +127,8 @@
         "description": "Select where OGP should send notifications about grid or battery operation.",
         "data": {
           "notify_targets": "Notification recipients",
-          "browser_mod_targets": "Browser Mod devices",
           "notification_language": "Notification language",
           "send_notification": "Send notification",
-          "send_popup": "Show Browser Mod popup",
           "notify_grid_status": "Notify grid status",
           "notify_protection_status": "Notify protection and Override status",
           "notify_security": "Notify security events",
@@ -139,10 +136,8 @@
         },
         "data_description": {
           "notify_targets": "Select one or more available notify recipients.",
-          "browser_mod_targets": "Select one or more Browser Mod devices for popups.",
           "notification_language": "Language of the generated OGP automation and messages.",
           "send_notification": "Send a notification to the selected notify recipients when the house operating mode changes.",
-          "send_popup": "Show a Browser Mod popup on the selected devices when the house operating mode changes.",
           "notify_grid_status": "Send notifications when the house changes between grid and battery operation.",
           "notify_protection_status": "Send notifications when a device is locked or an Override starts or ends.",
           "notify_security": "Send notifications for rejected Override attempts caused by an invalid PIN.",
@@ -154,12 +149,10 @@
         "description": "Select the notify recipients and Browser Mod devices that should receive OGP notifications.",
         "data": {
           "notify_targets": "Notify recipients",
-          "browser_mod_targets": "Browser Mod devices",
           "notification_language": "Notification language"
         },
         "data_description": {
           "notify_targets": "Select the Home Assistant notify recipients available for OGP notifications.",
-          "browser_mod_targets": "Select the Browser Mod devices available for OGP popups.",
           "notification_language": "Language of the generated OGP automation and messages."
         }
       },
@@ -177,7 +170,6 @@
     "error": {
       "notification_type_required": "Select at least one notification type.",
       "notify_target_required": "Select at least one notify recipient.",
-      "browser_mod_target_required": "Select at least one Browser Mod device.",
       "custom_target_required": "Select at least one notify recipient or Browser Mod device.",
       "custom_event_required": "Select at least one notification event."
     }
@@ -225,7 +217,6 @@
           "command_timeout": "Command timeout",
           "automations": "Associated automations",
           "override_enabled": "Enable override",
-          "require_pin": "Require PIN",
           "minimum_runtime": "Minimum runtime",
           "maximum_runtime": "Maximum runtime",
           "show_all_automations": "Show all automations",
@@ -243,20 +234,16 @@
         "description": "Select where OGP should send notifications about grid or battery operation.",
         "data": {
           "notify_targets": "Notification recipients",
-          "browser_mod_targets": "Browser Mod devices",
           "notification_language": "Notification language",
           "send_notification": "Send notification",
-          "send_popup": "Show Browser Mod popup",
           "notify_grid_status": "Notify grid status",
           "notify_protection_status": "Notify protection and Override status",
           "notify_security": "Notify security events"
         },
         "data_description": {
           "notify_targets": "Select one or more available notify recipients.",
-          "browser_mod_targets": "Select one or more Browser Mod devices for popups.",
           "notification_language": "Language of the generated OGP automation and messages.",
           "send_notification": "Send a notification to the selected notify recipients when the house operating mode changes.",
-          "send_popup": "Show a Browser Mod popup on the selected devices when the house operating mode changes.",
           "notify_grid_status": "Send notifications when the house changes between grid and battery operation.",
           "notify_protection_status": "Send notifications when a device is locked or an Override starts or ends.",
           "notify_security": "Send notifications for rejected Override attempts caused by an invalid PIN."
@@ -295,9 +282,7 @@
         "description": "Configure the global notification.",
         "data": {
           "send_notification": "Send notification",
-          "send_popup": "Show Browser Mod popup",
           "notify_targets": "Notification recipients",
-          "browser_mod_targets": "Browser Mod devices",
           "notify_grid_status": "Notify grid status",
           "notify_protection_status": "Notify protection and Override status",
           "notify_security": "Notify security events",
@@ -399,8 +384,7 @@
     },
     "notification_target_type": {
       "options": {
-        "notify": "Notify",
-        "popup": "Browser Mod"
+        "notify": "Notify"
       }
     },
     "notification_events": {

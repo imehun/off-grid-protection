@@ -17,7 +17,6 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.util import slugify
 
 from . import DOMAIN
-from .lovelace import generate_setup_instructions
 from .coordinator import normalize_log_level
 from .runtime import GridStatus
 from .notifications import (
@@ -25,7 +24,6 @@ from .notifications import (
     async_generate_house_status_automation,
     async_remove_house_status_automation,
     get_notify_options,
-    get_browser_mod_device_options,
     _load_notification_texts,
 )
 
@@ -108,11 +106,6 @@ def _current_ogp_entity_id(
             "status zaštite",
             "status_zastite",
         ),
-        "pin": (
-            "override_pin",
-            "pin",
-            "override",
-        ),
     }
 
     terms = role_terms.get(role, (role,))
@@ -189,7 +182,6 @@ def _generate_full_lovelace_yaml(hass, central_entry_id: str) -> str:
             ("duration", "_override_duration"),
             ("remaining", "_override_remaining"),
             ("protection", "_protection_status"),
-            ("pin", "_override_pin"),
         ):
             original = next(
                 (item for item in generated if str(item).endswith(suffix)),
@@ -202,10 +194,13 @@ def _generate_full_lovelace_yaml(hass, central_entry_id: str) -> str:
 
         devices.append((str(name), str(entity_id), by_role))
 
+    recovery_delay = central.get("recovery_delay", 60)
+
     lines = [
         "type: custom:ogp-card",
         f"grid_status_entity: {grid_entity}",
         f"central_entry_id: {central_entry_id}",
+        f"recovery_delay: {int(recovery_delay)}",
         "home_dashboard_path: /dashboard",
         "devices:",
     ]
@@ -221,8 +216,6 @@ def _generate_full_lovelace_yaml(hass, central_entry_id: str) -> str:
             lines.append(f"    override_duration_entity: {entities['duration']}")
         if entities.get("remaining"):
             lines.append(f"    override_remaining_entity: {entities['remaining']}")
-        if entities.get("pin"):
-            lines.append(f"    override_pin_entity: {entities['pin']}")
 
     return "\n".join(lines) + "\n"
 
@@ -508,9 +501,6 @@ class OffGridProtectionConfigFlow(
             notify_targets=notification_config[
                 "notify_targets"
             ],
-            browser_mod_targets=notification_config[
-                "browser_mod_targets"
-            ],
             language=notification_config[
                 "language"
             ],
@@ -524,7 +514,7 @@ class OffGridProtectionConfigFlow(
         )
 
         central_config["generated_resources"] = {
-            "automations": [
+            "notification_listeners": [
                 automation_id,
             ],
         }
@@ -593,14 +583,6 @@ class OffGridProtectionConfigFlow(
                     )
                 ),
                 vol.Required(
-                    "central_pin",
-                    default="1234",
-                ): str,
-                vol.Required(
-                    "pin_check",
-                    default=True,
-                ): bool,
-                vol.Required(
                     "recovery_enabled",
                     default=True,
                 ): bool,
@@ -643,11 +625,7 @@ class OffGridProtectionConfigFlow(
             self._custom_notify_targets = list(
                 user_input.get("notify_targets", [])
             )
-            self._custom_browser_mod_targets = list(
-                user_input.get("browser_mod_targets", [])
-            )
-
-            if not self._custom_notify_targets and not self._custom_browser_mod_targets:
+            if not self._custom_notify_targets:
                 return self.async_show_form(
                     step_id="custom_notification_targets",
                     data_schema=self._custom_notification_targets_schema(
@@ -685,12 +663,6 @@ class OffGridProtectionConfigFlow(
             list(custom.get("notify", {}).keys())
             or current.get("notify_targets", []),
         )
-        popup_default = submitted.get(
-            "browser_mod_targets",
-            list(custom.get("popup", {}).keys())
-            or current.get("browser_mod_targets", []),
-        )
-
         return vol.Schema(
             {
                 vol.Optional(
@@ -701,15 +673,6 @@ class OffGridProtectionConfigFlow(
                         options=get_notify_options(self.hass),
                         multiple=True,
                         mode=selector.SelectSelectorMode.DROPDOWN,
-                    )
-                ),
-                vol.Optional(
-                    "browser_mod_targets",
-                    default=popup_default,
-                ): selector.DeviceSelector(
-                    selector.DeviceSelectorConfig(
-                        integration="browser_mod",
-                        multiple=True,
                     )
                 ),
                 vol.Required(
@@ -741,10 +704,6 @@ class OffGridProtectionConfigFlow(
         notify_targets = list(
             getattr(self, "_custom_notify_targets", [])
         )
-        browser_targets = list(
-            getattr(self, "_custom_browser_mod_targets", [])
-        )
-
         # Build a stable mapping from form field names to target IDs.
         target_fields: dict[str, tuple[str, str]] = {}
         fields: dict = {}
@@ -770,7 +729,6 @@ class OffGridProtectionConfigFlow(
 
         old_custom = current.get("custom_targets", {})
         old_notify = old_custom.get("notify", {})
-        old_popup = old_custom.get("popup", {})
 
         for index, target in enumerate(notify_targets):
             options = get_notify_options(self.hass)
@@ -797,36 +755,11 @@ class OffGridProtectionConfigFlow(
                 )
             )
 
-        browser_options = get_browser_mod_device_options(self.hass)
-        for index, target in enumerate(browser_targets):
-            label = next(
-                (
-                    item["label"]
-                    for item in browser_options
-                    if item["value"] == target
-                ),
-                target,
-            )
-            field = f"🖥️ {label}"
-            target_fields[field] = ("popup", target)
-            fields[
-                vol.Required(
-                    field,
-                    default=list(old_popup.get(target, ["grid", "protection", "security"])),
-                )
-            ] = selector.SelectSelector(
-                selector.SelectSelectorConfig(
-                    options=event_options,
-                    multiple=True,
-                    mode=selector.SelectSelectorMode.DROPDOWN,
-                )
-            )
-
         self._custom_target_fields = target_fields
         schema = vol.Schema(fields)
 
         if user_input is not None:
-            custom_targets = {"notify": {}, "popup": {}}
+            custom_targets = {"notify": {}}
             selected_events: set[str] = set()
 
             for field, (target_type, target) in target_fields.items():
@@ -857,7 +790,6 @@ class OffGridProtectionConfigFlow(
                 ],
                 "notification_events": sorted(selected_events),
                 "notify_targets": notify_targets,
-                "browser_mod_targets": browser_targets,
                 "custom_targets": custom_targets,
                 "language": language,
             }
@@ -896,8 +828,6 @@ class OffGridProtectionConfigFlow(
             notification_types = []
             if user_input.get("send_notification", False):
                 notification_types.append("notify")
-            if user_input.get("send_popup", False):
-                notification_types.append("popup")
             notification_events = []
             if user_input.get("notify_grid_status", True):
                 notification_events.append("grid")
@@ -907,8 +837,6 @@ class OffGridProtectionConfigFlow(
                 notification_events.append("security")
 
             notify_targets = list(user_input.get("notify_targets", []))
-            browser_mod_targets = list(user_input.get("browser_mod_targets", []))
-
             if not notification_types:
                 return self.async_show_form(
                     step_id="central_notifications",
@@ -921,12 +849,6 @@ class OffGridProtectionConfigFlow(
                     data_schema=self._central_notifications_schema(user_input),
                     errors={"base": "notify_target_required"},
                 )
-            if "popup" in notification_types and not browser_mod_targets:
-                return self.async_show_form(
-                    step_id="central_notifications",
-                    data_schema=self._central_notifications_schema(user_input),
-                    errors={"base": "browser_mod_target_required"},
-                )
 
             notification_config = {
                 "enabled": True,
@@ -934,7 +856,6 @@ class OffGridProtectionConfigFlow(
                 "notification_types": notification_types,
                 "notification_events": notification_events,
                 "notify_targets": notify_targets,
-                "browser_mod_targets": browser_mod_targets,
                 "language": user_input.get("notification_language", "en"),
             }
 
@@ -974,13 +895,6 @@ class OffGridProtectionConfigFlow(
                         "notify" in current.get("notification_types", ["notify"]),
                     ),
                 ): bool,
-                vol.Required(
-                    "send_popup",
-                    default=current.get(
-                        "send_popup",
-                        "popup" in current.get("notification_types", []),
-                    ),
-                ): bool,
                 vol.Optional(
                     "notify_targets",
                     default=current.get("notify_targets", []),
@@ -989,15 +903,6 @@ class OffGridProtectionConfigFlow(
                         options=get_notify_options(self.hass),
                         multiple=True,
                         mode=selector.SelectSelectorMode.DROPDOWN,
-                    )
-                ),
-                vol.Optional(
-                    "browser_mod_targets",
-                    default=current.get("browser_mod_targets", []),
-                ): selector.DeviceSelector(
-                    selector.DeviceSelectorConfig(
-                        integration="browser_mod",
-                        multiple=True,
                     )
                 ),
                 vol.Required(
@@ -1343,17 +1248,13 @@ class OffGridProtectionConfigFlow(
         """Configure device override settings."""
 
         if user_input is not None:
-            self._device_override = user_input
-            return await self.async_step_lovelace_language()
+            self._device_override = dict(user_input)
+            return await self.async_step_generate({})
 
         schema = vol.Schema(
             {
                 vol.Required(
                     "override_enabled",
-                    default=True,
-                ): bool,
-                vol.Required(
-                    "require_pin",
                     default=True,
                 ): bool,
                 vol.Required(
@@ -1389,50 +1290,13 @@ class OffGridProtectionConfigFlow(
         )
 
 
-    async def async_step_lovelace_language(
-        self,
-        user_input=None,
-    ):
-        """Select language for generated Lovelace YAML."""
-
-        if user_input is not None:
-            self._lovelace_language = user_input["lovelace_language"]
-            return await self.async_step_generate()
-
-        schema = vol.Schema(
-            {
-                vol.Required(
-                    "lovelace_language",
-                    default="en",
-                ): selector.SelectSelector(
-                    selector.SelectSelectorConfig(
-                        options=[
-                            {"value": "en", "label": "English"},
-                            {"value": "hr", "label": "Hrvatski"},
-                        ],
-                        mode=selector.SelectSelectorMode.DROPDOWN,
-                    )
-                ),
-            }
-        )
-
-        return self.async_show_form(
-            step_id="lovelace_language",
-            data_schema=schema,
-        )
-
     async def async_step_generate(
         self,
         user_input=None,
     ):
-        """Generate resources and Lovelace setup instructions."""
+        """Finish device setup without generating individual Lovelace cards."""
 
         if user_input is not None:
-            generate_yaml = user_input.get(
-                "generate_lovelace_yaml",
-                False,
-            )
-
             device = {
                 "id": uuid4().hex,
                 "name": self._device_name,
@@ -1463,27 +1327,8 @@ class OffGridProtectionConfigFlow(
                 f"number.{slug}_override_duration",
                 f"sensor.{slug}_override_remaining",
                 f"sensor.{slug}_protection_status",
-                f"text.{slug}_override_pin",
             ]
 
-            if generate_yaml:
-                instructions = generate_setup_instructions(
-                    device_name=self._device_name,
-                    device_entity_id=self._device_config["entity_id"],
-                    language=self._lovelace_language,
-                )
-
-                persistent_notification.async_create(
-                    self.hass,
-                    message=instructions,
-                    title=(
-                        f"OGP – Off-grid Protection — "
-                        f"Lovelace: {self._device_name}"
-                    ),
-                    notification_id=(
-                        f"off_grid_lovelace_{device['id']}"
-                    ),
-                )
 
             return self.async_create_entry(
                 title=self._device_name,
@@ -1494,14 +1339,7 @@ class OffGridProtectionConfigFlow(
                 },
             )
 
-        schema = vol.Schema(
-            {
-                vol.Optional(
-                    "generate_lovelace_yaml",
-                    default=False,
-                ): bool,
-            }
-        )
+        schema = vol.Schema({})
 
         return self.async_show_form(
             step_id="generate",
@@ -1575,8 +1413,6 @@ class OffGridProtectionOptionsFlow(
             if action == "device_settings":
                 return await self.async_step_device_settings()
 
-            if action == "regenerate_lovelace_yaml":
-                return await self.async_step_regenerate_lovelace_yaml()
 
         schema = vol.Schema(
             {
@@ -1587,7 +1423,6 @@ class OffGridProtectionOptionsFlow(
                     selector.SelectSelectorConfig(
                         options=[
                             "device_settings",
-                            "regenerate_lovelace_yaml",
                         ],
                         mode=selector.SelectSelectorMode.LIST,
                         translation_key="device_options_action",
@@ -1598,67 +1433,6 @@ class OffGridProtectionOptionsFlow(
 
         return self.async_show_form(
             step_id="device_options",
-            data_schema=schema,
-        )
-
-    async def async_step_regenerate_lovelace_yaml(
-        self,
-        user_input=None,
-    ):
-        """Regenerate Lovelace YAML for this device."""
-
-        device = self.config_entry.data.get("device", {})
-
-        if user_input is not None:
-            if _ogp_settings_locked_off_grid(self.hass, self.config_entry):
-                return self.async_abort(reason="settings_locked_off_grid")
-
-            language = user_input["lovelace_language"]
-
-            instructions = generate_setup_instructions(
-                device_name=device.get("name", ""),
-                device_entity_id=device.get("entity_id", ""),
-                language=language,
-            )
-
-            device_id = device.get(
-                "id",
-                self.config_entry.entry_id,
-            )
-
-            persistent_notification.async_create(
-                self.hass,
-                message=instructions,
-                notification_id=f"off_grid_lovelace_{device_id}",
-            )
-
-            return self.async_create_entry(
-                title="",
-                data={},
-            )
-
-        current_language = device.get(
-            "lovelace_language",
-            "en",
-        )
-
-        schema = vol.Schema(
-            {
-                vol.Required(
-                    "lovelace_language",
-                    default=current_language,
-                ): selector.SelectSelector(
-                    selector.SelectSelectorConfig(
-                        options=["en", "hr"],
-                        mode=selector.SelectSelectorMode.DROPDOWN,
-                        translation_key="lovelace_language",
-                    )
-                ),
-            }
-        )
-
-        return self.async_show_form(
-            step_id="regenerate_lovelace_yaml",
             data_schema=schema,
         )
 
@@ -1677,7 +1451,7 @@ class OffGridProtectionOptionsFlow(
         if mode == "custom":
             custom = notifications.get("custom_targets", {})
             migrated: list[dict] = []
-            for target_type, targets in (("notify", custom.get("notify", {})), ("popup", custom.get("popup", {}))):
+            for target_type, targets in (("notify", custom.get("notify", {})),):
                 for target, events in targets.items():
                     migrated.append({
                         "id": uuid4().hex,
@@ -1696,7 +1470,6 @@ class OffGridProtectionOptionsFlow(
             "notification_types": list(notifications.get("notification_types", [])),
             "notification_events": list(notifications.get("notification_events", [])),
             "notify_targets": list(notifications.get("notify_targets", [])),
-            "browser_mod_targets": list(notifications.get("browser_mod_targets", [])),
             "language": notifications.get("language", "en"),
             "automation_id": notifications.get("automation_id") or f"{AUTOMATION_ID_PREFIX}_{uuid4().hex[:12]}",
         }]
@@ -1716,11 +1489,8 @@ class OffGridProtectionOptionsFlow(
                 )
                 prefix = "📱 "
             else:
-                label = next(
-                    (item["label"] for item in get_browser_mod_device_options(self.hass) if item["value"] == target),
-                    target,
-                )
-                prefix = "🖥️ "
+                label = target
+                prefix = "📱 "
 
         events = self._notification_event_labels(profile)
         return f"{prefix}{label}" + (f" — {events}" if events else "")
@@ -1916,15 +1686,11 @@ class OffGridProtectionOptionsFlow(
             notification_types = []
             if user_input.get("send_notification"):
                 notification_types.append("notify")
-            if user_input.get("send_popup"):
-                notification_types.append("popup")
             events = [event for event, key in (("grid", "notify_grid_status"), ("protection", "notify_protection_status"), ("security", "notify_security")) if user_input.get(key, True)]
             if not notification_types:
                 return self.async_show_form(step_id="notification_global", data_schema=self._notification_global_schema(profile, user_input), errors={"base": "notification_type_required"})
             if "notify" in notification_types and not user_input.get("notify_targets"):
                 return self.async_show_form(step_id="notification_global", data_schema=self._notification_global_schema(profile, user_input), errors={"base": "notify_target_required"})
-            if "popup" in notification_types and not user_input.get("browser_mod_targets"):
-                return self.async_show_form(step_id="notification_global", data_schema=self._notification_global_schema(profile, user_input), errors={"base": "browser_mod_target_required"})
             new_profile = dict(profile)
             new_profile.update({
                 "id": profile.get("id") or uuid4().hex,
@@ -1932,7 +1698,6 @@ class OffGridProtectionOptionsFlow(
                 "notification_types": notification_types,
                 "notification_events": events,
                 "notify_targets": list(user_input.get("notify_targets", [])),
-                "browser_mod_targets": list(user_input.get("browser_mod_targets", [])),
                 "language": user_input.get("notification_language", profile.get("language", "en")),
                 "automation_id": profile.get("automation_id") or f"{AUTOMATION_ID_PREFIX}_{uuid4().hex[:12]}",
             })
@@ -1946,9 +1711,7 @@ class OffGridProtectionOptionsFlow(
         def val(key, default): return submitted.get(key, profile.get(key, default))
         return vol.Schema({
             vol.Required("send_notification", default="notify" in val("notification_types", ["notify"])): bool,
-            vol.Required("send_popup", default="popup" in val("notification_types", [])): bool,
             vol.Optional("notify_targets", default=val("notify_targets", [])): selector.SelectSelector(selector.SelectSelectorConfig(options=get_notify_options(self.hass), multiple=True, mode=selector.SelectSelectorMode.DROPDOWN)),
-            vol.Optional("browser_mod_targets", default=val("browser_mod_targets", [])): selector.DeviceSelector(selector.DeviceSelectorConfig(integration="browser_mod", multiple=True)),
             vol.Required("notify_grid_status", default="grid" in val("notification_events", ["grid", "protection", "security"])): bool,
             vol.Required("notify_protection_status", default="protection" in val("notification_events", ["grid", "protection", "security"])): bool,
             vol.Required("notify_security", default="security" in val("notification_events", ["grid", "protection", "security"])): bool,
@@ -1972,7 +1735,6 @@ class OffGridProtectionOptionsFlow(
                     selector.SelectSelectorConfig(
                         options=[
                             {"value": "notify", "label": "Notify"},
-                            {"value": "popup", "label": "Browser Mod"},
                         ],
                         mode=selector.SelectSelectorMode.LIST,
                         translation_key="notification_target_type",
@@ -1993,7 +1755,8 @@ class OffGridProtectionOptionsFlow(
         if target_type == "notify":
             target_options = get_notify_options(self.hass)
         else:
-            target_options = get_browser_mod_device_options(self.hass)
+            target_options = get_notify_options(self.hass)
+            target_type = "notify"
 
         if user_input is not None:
             target = user_input.get("target")
@@ -2045,11 +1808,8 @@ class OffGridProtectionOptionsFlow(
     ):
         profile = profile or {}
         submitted = submitted or {}
-        target_options = (
-            get_notify_options(self.hass)
-            if target_type == "notify"
-            else get_browser_mod_device_options(self.hass)
-        )
+        target_options = get_notify_options(self.hass)
+        target_type = "notify"
         default_target = submitted.get(
             "target",
             profile.get("target"),
@@ -2129,7 +1889,7 @@ class OffGridProtectionOptionsFlow(
         return result
 
     async def _async_save_notification_profiles(self, profiles: list[dict]):
-        """Replace generated notification automations and save all profiles."""
+        """Refresh direct notification listeners and save all profiles."""
         if _ogp_settings_locked_off_grid(self.hass, self.config_entry):
             return self.async_abort(reason="settings_locked_off_grid")
 
@@ -2154,14 +1914,13 @@ class OffGridProtectionOptionsFlow(
                     notification_types=profile.get("notification_types", []),
                     notification_events=profile.get("notification_events", []),
                     notify_targets=profile.get("notify_targets", []),
-                    browser_mod_targets=profile.get("browser_mod_targets", []),
                     language=profile.get("language", "en"),
                 )
             else:
                 target_type = profile.get("target_type")
                 target = profile.get("target")
                 events = profile.get("events", [])
-                custom_targets = {"notify": {}, "popup": {}}
+                custom_targets = {"notify": {}}
                 custom_targets[target_type][target] = events
                 await async_generate_house_status_automation(
                     self.hass,
@@ -2170,7 +1929,6 @@ class OffGridProtectionOptionsFlow(
                     notification_types=[target_type],
                     notification_events=events,
                     notify_targets=[target] if target_type == "notify" else [],
-                    browser_mod_targets=[target] if target_type == "popup" else [],
                     language=profile.get("language", "en"),
                     notification_mode="custom",
                     custom_targets=custom_targets,
@@ -2182,7 +1940,7 @@ class OffGridProtectionOptionsFlow(
         notifications = {
             "enabled": bool(profiles),
             "profiles": profiles,
-            "generated_resources": {"automations": sorted(active_ids)},
+            "generated_resources": {"notification_listeners": sorted(active_ids)},
         }
         # Keep the first profile mirrored in legacy fields for compatibility.
         if profiles:
@@ -2192,7 +1950,6 @@ class OffGridProtectionOptionsFlow(
                 "notification_types": first.get("notification_types", [first.get("target_type")] if first.get("target_type") else []),
                 "notification_events": first.get("notification_events", first.get("events", [])),
                 "notify_targets": first.get("notify_targets", [first.get("target")] if first.get("target_type") == "notify" else []),
-                "browser_mod_targets": first.get("browser_mod_targets", [first.get("target")] if first.get("target_type") == "popup" else []),
                 "language": first.get("language", "en"),
                 "automation_id": first.get("automation_id"),
             })
@@ -2217,7 +1974,7 @@ class OffGridProtectionOptionsFlow(
 
             central_config = dict(user_input)
             central_changed = any(central_config.get(key) != current.get(key) for key in (
-                "inverter_off_grid_status", "power_meter_status", "recovery_delay", "central_pin", "pin_check", "recovery_enabled", "logs"))
+                "inverter_off_grid_status", "power_meter_status", "recovery_delay", "recovery_enabled", "logs"))
             existing = current.get("notifications", {})
             if existing:
                 central_config["notifications"] = dict(existing)
@@ -2235,8 +1992,6 @@ class OffGridProtectionOptionsFlow(
             vol.Required("inverter_off_grid_status", default=current.get("inverter_off_grid_status")): selector.EntitySelector(selector.EntitySelectorConfig(domain=["sensor", "input_select"])),
             vol.Required("power_meter_status", default=current.get("power_meter_status")): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
             vol.Required("recovery_delay", default=current.get("recovery_delay", 60)): selector.NumberSelector(selector.NumberSelectorConfig(min=1, max=600, step=1, mode=selector.NumberSelectorMode.BOX, unit_of_measurement="s")),
-            vol.Required("central_pin", default=current.get("central_pin", "1234")): str,
-            vol.Required("pin_check", default=current.get("pin_check", True)): bool,
             vol.Required("recovery_enabled", default=current.get("recovery_enabled", True)): bool,
             vol.Required("logs", default=normalize_log_level(current.get("logs", "warnings"))): selector.SelectSelector(selector.SelectSelectorConfig(options=["off", "warnings", "debug"], mode=selector.SelectSelectorMode.LIST, translation_key="log_level")),
         }))
@@ -2328,9 +2083,6 @@ class OffGridProtectionOptionsFlow(
             updated_device["override"] = {
                 "override_enabled": user_input[
                     "override_enabled"
-                ],
-                "require_pin": user_input[
-                    "require_pin"
                 ],
                 "minimum_runtime": user_input[
                     "minimum_runtime"
@@ -2480,14 +2232,6 @@ class OffGridProtectionOptionsFlow(
                     "override_enabled",
                     default=override.get(
                         "override_enabled",
-                        True,
-                    ),
-                ): bool,
-
-                vol.Required(
-                    "require_pin",
-                    default=override.get(
-                        "require_pin",
                         True,
                     ),
                 ): bool,

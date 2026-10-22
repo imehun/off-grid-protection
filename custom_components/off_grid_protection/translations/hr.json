@@ -104,7 +104,6 @@
         "description": "Konfigurirajte ponašanje Overridea za ovaj uređaj.",
         "data": {
           "override_enabled": "Omogući Override",
-          "require_pin": "Zahtijevaj PIN",
           "minimum_runtime": "Minimalno trajanje",
           "maximum_runtime": "Maksimalno trajanje"
         }
@@ -128,10 +127,8 @@
         "description": "Odaberite kamo OGP šalje obavijest o mrežnom ili baterijskom radu kuće.",
         "data": {
           "notify_targets": "Primatelji obavijesti",
-          "browser_mod_targets": "Browser Mod uređaji",
           "notification_language": "Jezik obavijesti",
           "send_notification": "Pošalji obavijest",
-          "send_popup": "Prikaži Browser Mod popup",
           "notify_grid_status": "Obavijesti o statusu mreže",
           "notify_protection_status": "Obavijesti o zaštiti i Override statusu",
           "notify_security": "Obavijesti o sigurnosnim događajima",
@@ -139,10 +136,8 @@
         },
         "data_description": {
           "notify_targets": "Odaberite jedan ili više dostupnih notify primatelja.",
-          "browser_mod_targets": "Odaberite jedan ili više Browser Mod uređaja za popup.",
           "notification_language": "Jezik generirane OGP automatizacije i poruka.",
           "send_notification": "Pošalji obavijest na odabrane notify primatelje pri promjeni režima rada kuće.",
-          "send_popup": "Prikaži Browser Mod popup na odabranim uređajima pri promjeni režima rada kuće.",
           "notify_grid_status": "Šalji obavijesti kada kuća promijeni rad između mreže i baterije.",
           "notify_protection_status": "Šalji obavijesti kada se uređaj zaključa ili Override započne ili završi.",
           "notify_security": "Šalji obavijesti za odbijene pokušaje Overridea zbog neispravnog PIN-a.",
@@ -154,12 +149,10 @@
         "description": "Odaberite notify primatelje i Browser Mod uređaje koji trebaju primati OGP obavijesti.",
         "data": {
           "notify_targets": "Notify primatelji",
-          "browser_mod_targets": "Browser Mod uređaji",
           "notification_language": "Jezik obavijesti"
         },
         "data_description": {
           "notify_targets": "Odaberite dostupne Home Assistant notify primatelje za OGP obavijesti.",
-          "browser_mod_targets": "Odaberite dostupne Browser Mod uređaje za OGP popupove.",
           "notification_language": "Jezik generirane OGP automatizacije i poruka."
         }
       },
@@ -177,7 +170,6 @@
     "error": {
       "notification_type_required": "Odaberite barem jedan način obavijesti.",
       "notify_target_required": "Odaberite barem jednog notify primatelja.",
-      "browser_mod_target_required": "Odaberite barem jedan Browser Mod uređaj.",
       "custom_target_required": "Odaberite barem jednog notify primatelja ili Browser Mod uređaj.",
       "custom_event_required": "Odaberite barem jedan događaj obavijesti."
     }
@@ -226,7 +218,6 @@
           "automations": "Povezane automatizacije",
           "show_all_automations": "Prikaži sve automatizacije",
           "override_enabled": "Omogući Override",
-          "require_pin": "Zahtijevaj PIN",
           "minimum_runtime": "Minimalno trajanje",
           "maximum_runtime": "Maksimalno trajanje",
           "recovery_action": "Akcija oporavka"
@@ -243,20 +234,16 @@
         "description": "Odaberite kamo OGP šalje obavijest o mrežnom ili baterijskom radu kuće.",
         "data": {
           "notify_targets": "Primatelji obavijesti",
-          "browser_mod_targets": "Browser Mod uređaji",
           "notification_language": "Jezik obavijesti",
           "send_notification": "Pošalji obavijest",
-          "send_popup": "Prikaži Browser Mod popup",
           "notify_grid_status": "Obavijesti o statusu mreže",
           "notify_protection_status": "Obavijesti o zaštiti i Override statusu",
           "notify_security": "Obavijesti o sigurnosnim događajima"
         },
         "data_description": {
           "notify_targets": "Odaberite jedan ili više dostupnih notify primatelja.",
-          "browser_mod_targets": "Odaberite jedan ili više Browser Mod uređaja za popup.",
           "notification_language": "Jezik generirane OGP automatizacije i poruka.",
           "send_notification": "Pošalji obavijest na odabrane notify primatelje pri promjeni režima rada kuće.",
-          "send_popup": "Prikaži Browser Mod popup na odabranim uređajima pri promjeni režima rada kuće.",
           "notify_grid_status": "Šalji obavijesti kada kuća promijeni rad između mreže i baterije.",
           "notify_protection_status": "Šalji obavijesti kada se uređaj zaključa ili Override započne ili završi.",
           "notify_security": "Šalji obavijesti za odbijene pokušaje Overridea zbog neispravnog PIN-a."
@@ -295,9 +282,7 @@
         "description": "Postavke globalne obavijesti.",
         "data": {
           "send_notification": "Pošalji obavijest",
-          "send_popup": "Prikaži Browser Mod popup",
           "notify_targets": "Primatelji obavijesti",
-          "browser_mod_targets": "Browser Mod uređaji",
           "notify_grid_status": "Obavijesti o statusu mreže",
           "notify_protection_status": "Obavijesti o zaštiti i Override statusu",
           "notify_security": "Obavijesti o sigurnosnim događajima",
@@ -399,8 +384,7 @@
     },
     "notification_target_type": {
       "options": {
-        "notify": "Notify",
-        "popup": "Browser Mod"
+        "notify": "Notify"
       }
     },
     "notification_events": {

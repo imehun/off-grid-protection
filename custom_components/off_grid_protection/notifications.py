@@ -2,21 +2,16 @@
 
 from __future__ import annotations
 
-from functools import partial
 from pathlib import Path
 import json
-import re
 from typing import Any
 
-import yaml
 
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError
-from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers.event import async_track_state_change_event
 
 DOMAIN = "off_grid_protection"
 AUTOMATION_ID_PREFIX = "ogp_house_status_notification"
-AUTOMATIONS_FILE = "automations.yaml"
 
 
 def get_notify_options(hass: HomeAssistant) -> list[dict[str, str]]:
@@ -55,88 +50,6 @@ def get_notify_options(hass: HomeAssistant) -> list[dict[str, str]]:
     )
     return options
 
-
-def get_browser_mod_device_options(
-    hass: HomeAssistant,
-) -> list[dict[str, str]]:
-    """Return Browser Mod devices from the device registry."""
-    registry = dr.async_get(hass)
-    options: list[dict[str, str]] = []
-
-    for device in registry.devices.values():
-        if not any(
-            domain == "browser_mod"
-            for domain, _identifier in device.identifiers
-        ):
-            continue
-
-        label = device.name_by_user or device.name
-        options.append(
-            {
-                "value": device.id,
-                "label": label,
-            }
-        )
-
-    options.sort(
-        key=lambda item: item["label"].lower()
-    )
-    return options
-
-
-def _automation_file(hass: HomeAssistant) -> Path:
-    return Path(
-        hass.config.path(
-            AUTOMATIONS_FILE
-        )
-    )
-
-
-def _remove_generated_block(
-    content: str,
-    automation_id: str,
-) -> str:
-    """Remove one OGP generated automation item from automations.yaml."""
-    lines = content.splitlines(keepends=True)
-    start = None
-
-    for index, line in enumerate(lines):
-        if re.match(
-            rf"^\s*-\s+id:\s*{re.escape(automation_id)}\s*$",
-            line.rstrip(),
-        ):
-            start = index
-            break
-
-    if start is None:
-        return content
-
-    end = len(lines)
-
-    for index in range(start + 1, len(lines)):
-        if re.match(r"^\s*-\s+id:\s*", lines[index]):
-            end = index
-            break
-
-    remaining = lines[:start] + lines[end:]
-    return "".join(remaining)
-
-
-def _append_generated_block(
-    content: str,
-    block: str,
-) -> str:
-    cleaned = content.rstrip()
-
-    if cleaned in ("", "[]"):
-        return block.rstrip() + "\n"
-
-    return (
-        cleaned
-        + "\n\n"
-        + block.rstrip()
-        + "\n"
-    )
 
 
 def _notify_action(
@@ -177,32 +90,6 @@ def _notify_action(
     }
 
 
-def _popup_action(
-    device_ids: list[str],
-    title: str,
-    message: str,
-) -> dict[str, Any]:
-    """Build one Browser Mod popup action."""
-    return {
-        "action": "browser_mod.popup",
-        "target": {
-            "device_id": list(device_ids),
-        },
-        "data": {
-            "title": title,
-            "content": {
-                "type": "markdown",
-                "content": (
-                    f"## {title}\n\n"
-                    f"{message}"
-                ),
-            },
-            "dismissable": True,
-            "autoclose": 0,
-        },
-    }
-
-
 async def _load_notification_texts(
     hass: HomeAssistant,
     language: str,
@@ -231,300 +118,6 @@ async def _load_notification_texts(
     }
 
 
-def _build_automation(
-    *,
-    automation_id: str,
-    inverter_entity: str,
-    notification_types: list[str],
-    notification_events: list[str],
-    notify_targets: list[str],
-    browser_mod_targets: list[str],
-    texts: dict[str, str],
-    notification_mode: str = "global",
-    custom_targets: dict[str, dict[str, list[str]]] | None = None,
-) -> dict[str, Any]:
-    """Build the central OGP notification automation."""
-
-    def text(key: str) -> str:
-        return texts.get(key, key)
-
-    def notify_actions(
-        title: str,
-        message: str,
-        event_type: str,
-    ) -> list[dict[str, Any]]:
-        actions: list[dict[str, Any]] = []
-
-        if notification_mode == "custom":
-            custom = custom_targets or {}
-            for target, events in custom.get("notify", {}).items():
-                if event_type in events:
-                    actions.append(
-                        _notify_action(
-                            target,
-                            title,
-                            message,
-                        )
-                    )
-
-            popup_devices = [
-                target
-                for target, events in custom.get("popup", {}).items()
-                if event_type in events
-            ]
-            if popup_devices:
-                actions.append(
-                    _popup_action(
-                        popup_devices,
-                        title,
-                        message,
-                    )
-                )
-
-            return actions
-
-        effective_notification_types = set(
-            notification_types
-        )
-
-        # Keep saved configurations compatible with the UI: if recipients
-        # exist, notifications are enabled even if an older entry did not
-        # persist the corresponding type flag.
-        if notify_targets:
-            effective_notification_types.add("notify")
-
-        if browser_mod_targets:
-            effective_notification_types.add("popup")
-
-        if "notify" in effective_notification_types:
-            for target in notify_targets:
-                actions.append(
-                    _notify_action(
-                        target,
-                        title,
-                        message,
-                    )
-                )
-
-        if "popup" in effective_notification_types:
-            actions.append(
-                _popup_action(
-                    browser_mod_targets,
-                    title,
-                    message,
-                )
-            )
-
-        return actions
-
-    triggers: list[dict[str, Any]] = []
-
-    if "grid" in notification_events:
-        triggers.append({
-            "trigger": "state",
-            "entity_id": inverter_entity,
-            "id": "grid_status",
-        })
-
-    if "protection" in notification_events:
-        triggers.extend([
-            {
-                "trigger": "event",
-                "event_type": "off_grid_protection_recovery",
-                "id": "recovery_event",
-            },
-            {
-                "trigger": "event",
-                "event_type": "off_grid_protection_override",
-                "event_data": {"action": "activated"},
-                "id": "override_activated",
-            },
-            {
-                "trigger": "event",
-                "event_type": "off_grid_protection_override",
-                "event_data": {"action": "expired"},
-                "id": "override_expired",
-            },
-            {
-                "trigger": "event",
-                "event_type": "off_grid_protection_override",
-                "event_data": {"action": "grid_return"},
-                "id": "override_grid_return",
-            },
-            {
-                "trigger": "event",
-                "event_type": "off_grid_protection_locked",
-                "id": "protection_locked",
-            },
-            {
-                "trigger": "event",
-                "event_type": "off_grid_protection_shutdown_failed",
-                "id": "shutdown_failed",
-            },
-        ])
-
-    if "security" in notification_events:
-        triggers.append({
-            "trigger": "event",
-            "event_type": "off_grid_protection_security",
-            "id": "security_event",
-        })
-
-    choose: list[dict[str, Any]] = []
-
-    if "grid" in notification_events:
-        choose.extend([
-            {
-                "conditions": [
-                    {
-                        "condition": "template",
-                        "value_template": (
-                            "{{ trigger.id == 'grid_status' and "
-                            "trigger.from_state is not none and "
-                            "trigger.to_state is not none and "
-                            "trigger.from_state.state | lower not in "
-                            "['unavailable', 'unknown'] and "
-                            "trigger.to_state.state | lower "
-                            "| replace('-', '_') | replace(' ', '_') "
-                            "in ['off_grid', 'offgrid', 'island', 'islanding'] }}"
-                        ),
-                    }
-                ],
-                "sequence": notify_actions(
-                    text("grid_off_title"),
-                    text("grid_off_message"),
-                    "grid",
-                ),
-            },
-            {
-                "conditions": [
-                    {
-                        "condition": "template",
-                        "value_template": (
-                            "{{ trigger.id == 'grid_status' and "
-                            "trigger.from_state is not none and "
-                            "trigger.to_state is not none and "
-                            "trigger.from_state.state | lower not in "
-                            "['unavailable', 'unknown'] and "
-                            "trigger.to_state.state | lower "
-                            "| replace('-', '_') | replace(' ', '_') "
-                            "in ['on_grid', 'ongrid', 'grid', 'normal', 'connected'] }}"
-                        ),
-                    }
-                ],
-                "sequence": notify_actions(
-                    text("grid_on_title"),
-                    text("grid_on_message"),
-                    "grid",
-                ),
-            },
-        ])
-
-    if "protection" in notification_events:
-        choose.extend([
-            {
-                "conditions": [{"condition": "trigger", "id": "override_activated"}],
-                "sequence": notify_actions(
-                    text("override_title"),
-                    text("override_message"),
-                    "protection",
-                ),
-            },
-            {
-                "conditions": [{"condition": "trigger", "id": "override_expired"}],
-                "sequence": notify_actions(
-                    text("override_expired_title"),
-                    text("override_expired_message"),
-                    "protection",
-                ),
-            },
-            {
-                "conditions": [{"condition": "trigger", "id": "override_grid_return"}],
-                "sequence": notify_actions(
-                    text("override_grid_return_title"),
-                    text("override_grid_return_message"),
-                    "protection",
-                ),
-            },
-            {
-                "conditions": [{"condition": "trigger", "id": "protection_locked"}],
-                "sequence": notify_actions(
-                    text("locked_title"),
-                    text("locked_message"),
-                    "protection",
-                ),
-            },
-            {
-                "conditions": [{"condition": "trigger", "id": "shutdown_failed"}],
-                "sequence": notify_actions(
-                    text("shutdown_failed_title"),
-                    text("shutdown_failed_message"),
-                    "protection",
-                ),
-            },
-            {
-                "conditions": [
-                    {
-                        "condition": "template",
-                        "value_template": (
-                            "{{ trigger.id == 'recovery_event' and "
-                            "trigger.event.data.action == 'completed' }}"
-                        ),
-                    }
-                ],
-                "sequence": notify_actions(
-                    text("recovery_title"),
-                    text("recovery_message"),
-                    "protection",
-                ),
-            },
-        ])
-
-    if "security" in notification_events:
-        choose.append({
-            "conditions": [
-                {
-                    "condition": "template",
-                    "value_template": (
-                        "{{ trigger.id == 'security_event' and "
-                        "trigger.event.data.action == 'invalid_pin' }}"
-                    ),
-                }
-            ],
-            "sequence": notify_actions(
-                text("invalid_pin_title"),
-                text("invalid_pin_message"),
-                "security",
-            ),
-        })
-
-    return {
-        "id": automation_id,
-        "alias": text("automation_alias"),
-        "description": text("automation_description"),
-        "triggers": triggers,
-        "conditions": [],
-        "actions": [{"choose": choose}] if choose else [],
-        "mode": "queued",
-        "max": 20,
-    }
-
-def _read_text(path: Path) -> str:
-    """Read a text file in the executor thread."""
-    try:
-        return path.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        return ""
-
-
-def _write_text(path: Path, content: str) -> None:
-    """Write a text file in the executor thread."""
-    path.write_text(
-        content,
-        encoding="utf-8",
-    )
-
-
 async def async_generate_house_status_automation(
     hass: HomeAssistant,
     *,
@@ -533,83 +126,95 @@ async def async_generate_house_status_automation(
     notification_types: list[str],
     notification_events: list[str],
     notify_targets: list[str],
-    browser_mod_targets: list[str],
     language: str,
     notification_mode: str = "global",
     custom_targets: dict[str, dict[str, list[str]]] | None = None,
 ) -> str:
-    """Create or replace the OGP central notification automation."""
-    texts = await _load_notification_texts(
-        hass,
-        language,
-    )
+    """Register OGP notification listeners directly in Home Assistant."""
+    domain_data = hass.data.setdefault(DOMAIN, {})
+    listeners = domain_data.setdefault("notification_listeners", {})
+    old_unsubs = listeners.pop(automation_id, [])
+    for unsub in old_unsubs:
+        unsub()
 
-    automation = _build_automation(
-        automation_id=automation_id,
-        inverter_entity=inverter_entity,
-        notification_types=notification_types,
-        notification_events=notification_events,
-        notify_targets=notify_targets,
-        browser_mod_targets=browser_mod_targets,
-        texts=texts,
-        notification_mode=notification_mode,
-        custom_targets=custom_targets,
-    )
+    texts = await _load_notification_texts(hass, language)
+    enabled_events = set(notification_events)
 
-    path = _automation_file(hass)
+    # Older entries may use per-profile notification configuration.
+    targets_by_event: dict[str, list[str]] = {}
+    if notification_mode == "custom":
+        for target, events in (custom_targets or {}).get("notify", {}).items():
+            for event_name in events:
+                targets_by_event.setdefault(event_name, []).append(target)
+    else:
+        for event_name in enabled_events:
+            targets_by_event[event_name] = list(notify_targets)
 
-    try:
-        content = await hass.async_add_executor_job(
-            partial(
-                _read_text,
-                path,
-            )
-        )
-    except OSError as err:
-        raise HomeAssistantError(
-            f"Unable to read {path}: {err}"
-        ) from err
+    def targets_for(event_name: str) -> list[str]:
+        return targets_by_event.get(event_name, [])
 
-    content = _remove_generated_block(
-        content,
-        automation_id,
-    )
+    async def send(event_name: str, title_key: str, message_key: str, event_data: dict[str, Any] | None = None) -> None:
+        title = texts.get(title_key, title_key)
+        message = texts.get(message_key, message_key)
+        values = event_data or {}
+        message = message.replace("{{ trigger.event.data.device_name }}", str(values.get("device_name", "nepoznat uređaj")))
+        message = message.replace("{{ trigger.event.data.duration_minutes }}", str(values.get("duration_minutes", "?")))
+        for target in targets_for(event_name):
+            if target.startswith("entity:"):
+                service = "send_message"
+                service_data = {"title": title, "message": message}
+                target_data = {"entity_id": target.split(":", 1)[1]}
+                await hass.services.async_call("notify", service, service_data | {"target": target_data}, blocking=False)
+            elif target.startswith("service:"):
+                service_name = target.split(":", 1)[1]
+                await hass.services.async_call("notify", service_name, {"title": title, "message": message}, blocking=False)
 
-    block = yaml.safe_dump(
-        [automation],
-        allow_unicode=True,
-        sort_keys=False,
-        default_flow_style=False,
-    ).rstrip()
+    unsubs = []
 
-    content = _append_generated_block(
-        content,
-        block,
-    )
+    if "grid" in enabled_events:
+        async def grid_changed(event):
+            old = event.data.get("old_state")
+            new_state = event.data.get("new_state")
+            if old is None or new_state is None or old.state.lower() in ("unknown", "unavailable"):
+                return
+            normalized = new_state.state.lower().replace("-", "_").replace(" ", "_")
+            if normalized in ("off_grid", "offgrid", "island", "islanding"):
+                await send("grid", "grid_off_title", "grid_off_message")
+            elif normalized in ("on_grid", "ongrid", "grid", "normal", "connected"):
+                await send("grid", "grid_on_title", "grid_on_message")
+        unsubs.append(async_track_state_change_event(hass, [inverter_entity], grid_changed))
 
-    try:
-        await hass.async_add_executor_job(
-            partial(
-                _write_text,
-                path,
-                content,
-            )
-        )
-    except OSError as err:
-        raise HomeAssistantError(
-            f"Unable to write {path}: {err}"
-        ) from err
+    event_map = {
+        "off_grid_protection_recovery": ("protection", "recovery_title", "recovery_message", "completed"),
+        "off_grid_protection_override": ("protection", "override_title", "override_message", "activated"),
+        "off_grid_protection_locked": ("protection", "locked_title", "locked_message", None),
+        "off_grid_protection_shutdown_failed": ("protection", "shutdown_failed_title", "shutdown_failed_message", None),
+    }
+    # Separate event subscriptions keep behavior local to this integration and do not create HA automations.
+    for event_type, (category, title_key, message_key, required_action) in event_map.items():
+        if category not in enabled_events and not (category == "protection" and "protection" in enabled_events):
+            continue
+        if event_type == "off_grid_protection_override":
+            actions = {
+                "activated": ("override_title", "override_message"),
+                "expired": ("override_expired_title", "override_expired_message"),
+                "grid_return": ("override_grid_return_title", "override_grid_return_message"),
+            }
+        else:
+            actions = {required_action: (title_key, message_key)} if required_action else {None: (title_key, message_key)}
+        async def handle_event(event, _actions=actions, _category=category, _event_type=event_type):
+            action = event.data.get("action")
+            if action not in _actions:
+                return
+            if _event_type == "off_grid_protection_recovery" and action != "completed":
+                return
+            if _event_type == "off_grid_protection_security" and action != "invalid_pin":
+                return
+            t_key, m_key = _actions[action]
+            await send(_category, t_key, m_key, event.data)
+        unsubs.append(hass.bus.async_listen(event_type, handle_event))
 
-    if hass.services.has_service(
-        "automation",
-        "reload",
-    ):
-        await hass.services.async_call(
-            "automation",
-            "reload",
-            blocking=True,
-        )
-
+    listeners[automation_id] = unsubs
     return automation_id
 
 
@@ -617,47 +222,7 @@ async def async_remove_house_status_automation(
     hass: HomeAssistant,
     automation_id: str,
 ) -> None:
-    """Remove an OGP-generated central notification automation."""
-    path = _automation_file(hass)
-
-    try:
-        content = await hass.async_add_executor_job(
-            partial(
-                _read_text,
-                path,
-            )
-        )
-    except OSError:
-        return
-
-    if not content:
-        return
-
-    updated = _remove_generated_block(
-        content,
-        automation_id,
-    )
-
-    if updated == content:
-        return
-
-    try:
-        await hass.async_add_executor_job(
-            partial(
-                _write_text,
-                path,
-                updated,
-            )
-        )
-    except OSError:
-        return
-
-    if hass.services.has_service(
-        "automation",
-        "reload",
-    ):
-        await hass.services.async_call(
-            "automation",
-            "reload",
-            blocking=True,
-        )
+    """Unregister OGP notification listeners."""
+    listeners = hass.data.get(DOMAIN, {}).get("notification_listeners", {})
+    for unsub in listeners.pop(automation_id, []):
+        unsub()

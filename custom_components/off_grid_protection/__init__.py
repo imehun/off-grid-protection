@@ -42,17 +42,10 @@ REQUEST_OVERRIDE_SCHEMA = vol.Schema(
 SERVICE_SCHEMA = vol.Schema(
     {
         vol.Required("device_id"): cv.string,
-        vol.Optional(
-            "duration",
-            default=10,
-        ): vol.All(
+        vol.Optional("duration"): vol.All(
             vol.Coerce(int),
-            vol.Range(
-                min=1,
-                max=60,
-            ),
+            vol.Range(min=1, max=60),
         ),
-        vol.Required("pin"): cv.string,
     }
 )
 
@@ -119,8 +112,7 @@ def _override_notification_text(
         else:
             message = (
                 "Override was not activated. "
-                "Check OFF-GRID status, PIN, "
-                "and override duration."
+                "Check OFF-GRID status and ensure a valid override duration is configured."
             )
 
         return title, message
@@ -198,10 +190,6 @@ async def async_setup(
             )
         )
 
-        pin = str(
-            call.data["pin"]
-        )
-
         coordinators = hass.data.get(
             DOMAIN,
             {},
@@ -220,7 +208,6 @@ async def async_setup(
                 await coordinator.async_activate_override(
                     device_id=device_id,
                     duration_minutes=duration,
-                    pin=pin,
                 )
             )
 
@@ -300,20 +287,11 @@ async def async_setup(
             duration_entity = (
                 f"number.{slug}_override_duration"
             )
-            pin_entity = (
-                f"text.{slug}_override_pin"
-            )
-
             duration_state = hass.states.get(
                 duration_entity
             )
-            pin_state = hass.states.get(
-                pin_entity
-            )
-
             if (
                 duration_state is None
-                or pin_state is None
             ):
                 language = await _get_call_language(
                     hass,
@@ -340,38 +318,19 @@ async def async_setup(
             except (TypeError, ValueError):
                 duration = 0
 
-            supplied_pin = call.data.get(
-                "pin"
-            )
-
-            # The generated Browser Mod flow can issue a second request after
-            # the Text entity has already accepted Enter and cleared its value.
-            # If the device is already in Override, make that duplicate request
-            # idempotent instead of treating the now-empty PIN as invalid.
-            if (
-                supplied_pin is None
-                and not str(pin_state.state).strip()
-            ):
-                runtime = coordinator.get_device_runtime(
-                    device_id
+            if duration < 1:
+                language = await _get_call_language(hass, call)
+                title, message = _override_notification_text(language)
+                persistent_notification.async_create(
+                    hass, message="Override nije aktiviran: potrebno je definirati valjano trajanje za ovaj uređaj.",
+                    title=title, notification_id="off_grid_override_error",
                 )
-                if (
-                    runtime is not None
-                    and runtime.override_active
-                ):
-                    return {"success": True}
-
-            pin = str(
-                supplied_pin
-                if supplied_pin is not None
-                else pin_state.state
-            )
+                return {"success": False}
 
             success = (
                 await coordinator.async_activate_override(
                     device_id=device_id,
                     duration_minutes=duration,
-                    pin=pin,
                 )
             )
 
@@ -626,7 +585,7 @@ async def async_setup_entry(
                 "binary_sensor",
                 "number",
                 "sensor",
-                "text",
+                "button",
             ],
         )
 
@@ -728,7 +687,7 @@ async def async_setup_entry(
         {},
     )
 
-    # Recreate all generated notification automations after a central
+    # Register direct notification listeners after a central
     # unload/reload. V1.2.0 stores notifications as independent profiles;
     # keep the legacy single-profile path for older entries.
     profiles = notifications.get("profiles")
@@ -757,7 +716,6 @@ async def async_setup_entry(
                     notify_targets=[
                         "service:persistent_notification"
                     ],
-                    browser_mod_targets=[],
                     language=profile.get("language", "en"),
                 )
                 continue
@@ -766,12 +724,12 @@ async def async_setup_entry(
             target = profile.get("target")
             events = profile.get("events", [])
 
-            if target_type not in ("notify", "popup") or not isinstance(
+            if target_type != "notify" or not isinstance(
                 target, str
             ) or not target:
                 continue
 
-            custom_targets = {"notify": {}, "popup": {}}
+            custom_targets = {"notify": {}}
             custom_targets[target_type][target] = events
 
             await async_generate_house_status_automation(
@@ -783,7 +741,6 @@ async def async_setup_entry(
                 notification_types=[target_type],
                 notification_events=events,
                 notify_targets=[target] if target_type == "notify" else [],
-                browser_mod_targets=[target] if target_type == "popup" else [],
                 language=profile.get("language", "en"),
                 notification_mode="custom",
                 custom_targets=custom_targets,
@@ -809,10 +766,6 @@ async def async_setup_entry(
                 ),
                 notify_targets=notifications.get(
                     "notify_targets",
-                    [],
-                ),
-                browser_mod_targets=notifications.get(
-                    "browser_mod_targets",
                     [],
                 ),
                 language=notifications.get(
@@ -845,7 +798,7 @@ async def async_setup_entry(
             "binary_sensor",
             "number",
             "sensor",
-            "text",
+            "button",
         ],
     )
 
@@ -919,7 +872,7 @@ async def async_unload_entry(
                 "binary_sensor",
                 "number",
                 "sensor",
-                "text",
+                "button",
             ],
         )
 
@@ -971,7 +924,7 @@ async def async_unload_entry(
             "binary_sensor",
             "number",
             "sensor",
-            "text",
+            "button",
         ],
     )
 
@@ -1000,7 +953,7 @@ async def async_unload_entry(
     )
 
     for automation_id in generated.get(
-        "automations",
+        "notification_listeners",
         [],
     ):
         await async_remove_house_status_automation(

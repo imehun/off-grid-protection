@@ -1,6 +1,27 @@
 # OGP --- Configuration Guide
 
-Detailed configuration guide for OGP v1.2.1.
+Detailed configuration guide for OGP v1.4.0.
+
+## V1.4.0 release changes
+
+V1.4.0 updates the Lovelace card presentation and simplifies its controls
+without changing the OGP protection lifecycle.
+
+- The main `custom:ogp-card` uses a dark visual style.
+- The card no longer includes a separate Device Settings action. Device
+  Details, Reload Device and Enable / Disable Device remain available.
+- The dashboard return action is icon-only.
+- Central settings opens the standard Home Assistant OGP integration path.
+- The ON-GRID recovery countdown uses the configured `recovery_delay`
+  value supplied by the integration's generated YAML instead of a fixed
+  one-minute value.
+- Override countdown display updates every second while remaining
+  synchronized with the integration's state.
+- The central YAML generator continues to provide the configured
+  `home_dashboard_path`; the card's Central settings path is independent.
+
+The OGP backend remains authoritative for protection, shutdown, recovery
+and Override behavior.
 
 ## V1.3.0 release changes
 
@@ -41,24 +62,9 @@ V1.2.1 adds the following operational changes:
 The protection, shutdown, recovery and Override logic is unchanged from
 V1.2.0.
 
+## 1. Requirements
 
-## 1. Requirements and optional components
-
-OGP core configuration and protection do not require Huawei Solar,
-Browser Mod, Button-card or Stack-in-card.
-
-Optional components:
-
--   **Browser Mod** --- only for Browser Mod popup notifications.
--   **Button-card** --- recommended for the generated Override
-    dashboard.
--   **Stack-in-card** --- recommended for the generated Override
-    dashboard.
-
-Home Assistant notifications do not require Browser Mod.
-
-The generated Lovelace YAML is a convenience template. It is not an OGP
-dependency and may be edited freely.
+OGP core configuration and protection do not require additional frontend card components. The generated Lovelace YAML is a convenience template and may be edited freely.
 
 ## 2. Protection model
 
@@ -146,7 +152,6 @@ it provides:
 -   notification language (**English** or **Croatian**).
 
 The Global notification always uses Home Assistant's built-in
-`persistent_notification` service. It does not use Browser Mod and does
 not require a notification target to be selected.
 
 #### Per-device notification
@@ -155,7 +160,6 @@ Multiple Per-device notification profiles can exist. Each profile has its
 own target, event selection and language. The target type can be:
 
 -   **Notify** --- one Home Assistant notification target;
--   **Browser Mod** --- one Browser Mod device.
 
 Each Per-device profile can independently select Grid status, Protection /
 Override and Security events and can use English or Croatian.
@@ -309,7 +313,6 @@ It can use:
 -   minimum runtime;
 -   maximum runtime;
 -   requested duration;
--   PIN protection.
 
 Override does not automatically turn the device ON. The user controls
 whether the device is actually enabled.
@@ -374,7 +377,7 @@ Override is the intentional exception to reassertion.
 
 ## 9. Lovelace UI and generated YAML
 
-V1.3.0 provides a main `custom:ogp-card` Lovelace card.
+V1.4.0 provides the updated main `custom:ogp-card` Lovelace card.
 
 The card configuration contains:
 
@@ -382,7 +385,7 @@ The card configuration contains:
 type: custom:ogp-card
 grid_status_entity: sensor.example_grid_status
 central_entry_id: <OGP central config entry ID>
-home_dashboard_path: /dashboard
+home_dashboard_path: /config/integrations/integration/off_grid_protection
 devices:
   - name: "Example Device"
     entity: climate.example
@@ -390,7 +393,6 @@ devices:
     locked_entity: binary_sensor.example_off_grid_protection_locked
     override_duration_entity: number.example_override_duration
     override_remaining_entity: sensor.example_override_remaining
-    override_pin_entity: text.example_override_pin
 ```
 
 The device list is generated from the current OGP Device Entries.
@@ -446,8 +448,8 @@ The Lovelace card is a UI layer over the existing OGP backend.
 - Normal protection remains controlled by OGP.
 - Device manual ON / OFF controls are available only while the existing
   device Override is active.
-- Central settings, reload and enable/disable actions use the existing
-  OGP/Home Assistant configuration mechanisms.
+- Central settings opens the standard OGP integration path; reload and
+  enable/disable actions use the existing OGP/Home Assistant mechanisms.
 - The card does not implement an alternative protection or recovery
   algorithm.
 
@@ -462,16 +464,6 @@ shown.
 For Custom Devices, the configured `control_entity_id` is shown as
 **Automations / entities** because it is the external control entity, not
 a list of OGP-managed user automations.
-
-### 9.4 Optional frontend components
-
-The generated Lovelace YAML is a starting template and may be adapted
-freely.
-
-Button-card and Stack-in-card are optional recommendations for the
-generated Override dashboard. Browser Mod is only relevant to Browser Mod
-popup notifications.
-
 
 ## 10. Device removal and resource ownership
 

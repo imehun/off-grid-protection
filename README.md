@@ -1,6 +1,6 @@
 # OGP -- Off-grid Battery Protection
 
-**Current release: v1.3.0**
+**Current release: v1.4.0**
 
 Home Assistant custom integration for protecting a **battery system
 during OFF-GRID operation**.
@@ -24,12 +24,10 @@ the configured shutdown action.
 -   Selected load monitoring and OFF control
 -   Selected user automation snapshot, disabling and restoration
 -   Device-state safety reassertion without Override
--   PIN-protected, time-limited Override
 -   ON-GRID recovery
 -   Optional Custom Device control entity
 -   Custom recovery action: Stay OFF or Turn ON
 -   Home Assistant notifications
--   Optional Browser Mod popup notifications
 -   Config Flow configuration
 -   Main OGP Lovelace dashboard card
 -   Central Lovelace YAML generator
@@ -129,11 +127,7 @@ OGP supports two notification profile types:
     The user selects any combination of Grid status, Protection / Override
     and Security events, and selects the notification language.
 -   **Per-device notification** --- multiple profiles can be created.
-    Each profile targets one Home Assistant notification target or one
-    Browser Mod device and can have its own event selection and language.
-
-Browser Mod is available only for Per-device notifications. It is not used
-by the Global notification profile.
+    Each profile targets one Home Assistant notification target and
 
 The notification language supports English and Croatian.
 
@@ -155,7 +149,6 @@ Override can use:
 -   minimum runtime;
 -   maximum runtime;
 -   requested duration;
--   PIN protection.
 
 Override does not automatically turn a protected device ON. The user
 decides whether and when the device should operate.
@@ -183,12 +176,6 @@ existing Home Assistant resources.
 Generated Lovelace YAML is a starting template and is not a dependency
 of the core protection logic.
 
-Optional frontend components:
-
--   Browser Mod --- only for Browser Mod popup notifications;
--   Button-card --- recommended for generated Override dashboard UI;
--   Stack-in-card --- recommended for generated Override dashboard UI.
-
 ## Tested integrations
 
 OGP has been tested with Home Assistant entities provided by Huawei
@@ -204,6 +191,23 @@ or distribute Huawei Solar source code.
 -   [`CONFIGURATION.md`](CONFIGURATION.md) --- Detailed configuration
 -   [`CONFIGURATION_hr.md`](CONFIGURATION_hr.md) --- Detailed Croatian configuration
 
+## V1.4.0 changes
+
+**v1.4.0 --- Dark Lovelace UI and countdown fixes**
+
+-   **Dark OGP card:** updated dark styling with blue accents and clear
+    protection/status indicators.
+-   **Simplified device actions:** Device Settings is removed; Reload
+    Device, Enable / Disable Device and Device Details remain.
+-   **Central settings link:** opens the standard OGP integration path.
+-   **Recovery countdown:** the card uses `recovery_delay` supplied by
+    the integration's generated YAML rather than a hardcoded 60 seconds.
+-   **Smooth Override countdown:** the displayed remaining time updates
+    every second while staying synchronized with integration state.
+
+The protection, shutdown, recovery and Override backend behavior remains
+unchanged.
+
 ## V1.3.0 changes
 
 **v1.3.0 --- Lovelace UI and configuration workflow**
@@ -215,13 +219,13 @@ unchanged.
 -   **Main OGP Lovelace card:** a central dashboard card shows ON-GRID /
     OFF-GRID status, protection status, recovery countdown and configured
     OGP devices.
--   **Central controls:** the card provides access to Central settings,
-    Reload central and Enable / Disable central.
+-   **Central controls:** the card provides an icon-only dashboard return,
+    Central settings link, Reload central and Enable / Disable central.
 -   **Device controls:** each device shows its protection state and
     actual Home Assistant entity state. Manual ON / OFF control is
     available only while that device's existing OGP Override is active.
--   **Device options:** device Settings, Reload Device and Device Details
-    are available from the card.
+-   **Device options:** Reload Device, Enable / Disable Device and Device
+    Details are available from the card; Device Settings is not shown.
 -   **Central Options menu:** OGP central Options now provides Central
     setup, Notifications and Generate Lovelace YAML.
 -   **Full central Lovelace YAML generator:** generates the complete OGP

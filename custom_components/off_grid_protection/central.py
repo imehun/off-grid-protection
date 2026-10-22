@@ -13,8 +13,6 @@ class OffGridCentral:
     inverter_off_grid_status: str
     power_meter_status: str
     recovery_delay: int = 60
-    central_pin: str = "1234"
-    pin_check: bool = True
     recovery_enabled: bool = True
 
     devices: list[OffGridDevice] = field(
@@ -56,18 +54,6 @@ class OffGridCentral:
                     60,
                 )
             ),
-            central_pin=str(
-                central.get(
-                    "central_pin",
-                    "1234",
-                )
-            ),
-            pin_check=bool(
-                central.get(
-                    "pin_check",
-                    True,
-                )
-            ),
             recovery_enabled=bool(
                 central.get(
                     "recovery_enabled",
@@ -89,8 +75,6 @@ class OffGridCentral:
                     self.power_meter_status
                 ),
                 "recovery_delay": self.recovery_delay,
-                "central_pin": self.central_pin,
-                "pin_check": self.pin_check,
                 "recovery_enabled": self.recovery_enabled,
             },
             "devices": [

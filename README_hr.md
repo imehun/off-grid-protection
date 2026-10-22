@@ -1,6 +1,6 @@
 # OGP -- Off-grid Battery Protection
 
-**Trenutna verzija: v1.3.0**
+**Trenutna verzija: v1.4.0**
 
 Prilagođena Home Assistant integracija za zaštitu **baterijskog sustava
 tijekom OFF-GRID rada**.
@@ -25,12 +25,10 @@ konfiguriranu radnju gašenja.
 -   snapshot, isključivanje i vraćanje odabranih korisničkih
     automatizacija
 -   sigurnosno ponovno gašenje trošila bez Overridea
--   vremenski ograničen Override zaštićen PIN-om
 -   recovery nakon povratka na ON-GRID
 -   generički Custom Device s Control entityjem
 -   Custom recovery: Stay OFF ili Turn ON
 -   Home Assistant obavijesti
--   opcionalne Browser Mod popup obavijesti
 -   konfiguracija putem Config Flowa
 -   glavni OGP Lovelace dashboard card
 -   centralni generator Lovelace YAML-a
@@ -130,11 +128,7 @@ OGP podržava dvije vrste profila obavijesti:
     događaja Status mreže, Zaštita / Override i Sigurnost te jezik
     obavijesti.
 -   **Obavijest prema uređaju** --- može se kreirati više profila. Svaki
-    profil cilja jedno Home Assistant notification odredište ili jedan
-    Browser Mod uređaj te ima vlastiti odabir događaja i jezika.
-
-Browser Mod dostupan je samo za obavijesti prema uređaju. Globalna
-obavijest ga ne koristi.
+    profil cilja jedno Home Assistant notification odredište te ima
 
 Jezik obavijesti podržava hrvatski i engleski.
 
@@ -155,7 +149,6 @@ Može koristiti:
 -   minimalno trajanje;
 -   maksimalno trajanje;
 -   traženo trajanje;
--   PIN zaštitu.
 
 Override ne uključuje automatski zaštićeno trošilo. Korisnik odlučuje
 hoće li i kada uređaj stvarno raditi.
@@ -167,14 +160,6 @@ Home Assistant resursa.
 
 Generirani Lovelace YAML je početni predložak i nije dependency osnovne
 OGP zaštitne funkcionalnosti.
-
-Opcionalne frontend komponente:
-
--   Browser Mod --- samo za Browser Mod popup obavijesti;
--   Button-card --- preporučuje se za generirano Override dashboard
-    sučelje;
--   Stack-in-card --- preporučuje se za generirano Override dashboard
-    sučelje.
 
 ## Testirane integracije
 
@@ -205,6 +190,23 @@ Detaljna Lovelace konfiguracija i generiranje YAML-a opisani su u
 -   [`CONFIGURATION.md`](CONFIGURATION.md) --- detaljna konfiguracija
 -   [`CONFIGURATION_hr.md`](CONFIGURATION_hr.md) --- detaljne hrvatske upute
 
+## Promjene u V1.4.0
+
+**v1.4.0 --- Tamni Lovelace UI i popravci odbrojavanja**
+
+-   **Tamna OGP kartica:** novi tamni izgled s plavim naglascima i jasnim
+    oznakama zaštite i statusa.
+-   **Pojednostavljene radnje uređaja:** Device Settings je uklonjen;
+    ostaju Reload Device, Enable / Disable Device i Device Details.
+-   **Link na centralne postavke:** otvara standardnu putanju OGP
+    integracije.
+-   **Recovery countdown:** kartica koristi `recovery_delay` iz YAML-a
+    generiranog integracijom, a ne fiksnih 60 sekundi.
+-   **Glatko Override odbrojavanje:** prikaz preostalog vremena osvježava
+    se svake sekunde i usklađuje sa stanjem integracije.
+
+Backend zaštite, gašenja, recoveryja i Overridea ostaje nepromijenjen.
+
 ## Promjene u V1.3.0
 
 **v1.3.0 --- Lovelace sučelje i konfiguracijski workflow**
@@ -216,13 +218,13 @@ nepromijenjena.
 -   **Glavni OGP Lovelace card:** centralni card prikazuje ON-GRID /
     OFF-GRID status, status zaštite, recovery countdown i konfigurirane
     OGP uređaje.
--   **Centralne kontrole:** card omogućuje pristup Centralnim postavkama,
-    ponovnom učitavanju centrale i Enable / Disable centrale.
+-   **Centralne kontrole:** card ima ikonu za povratak na dashboard,
+    link na Central settings, Reload central i Enable / Disable central.
 -   **Kontrole uređaja:** svaki uređaj prikazuje status zaštite i stvarni
     Home Assistant entity status. Ručno ON / OFF upravljanje dostupno je
     samo dok je aktivan postojeći OGP Override tog uređaja.
--   **Opcije uređaja:** iz carda su dostupni Postavke, Ponovno učitaj
-    uređaj i Detalji uređaja.
+-   **Opcije uređaja:** dostupni su Reload Device, Enable / Disable Device
+    i Device Details; Device Settings nije prikazan.
 -   **Centralni Options izbornik:** OGP centralne Options sada nude
     Centralne postavke, Obavijesti i Generiranje Lovelace YAML-a.
 -   **Generator glavnog Lovelace YAML-a:** generira kompletnu

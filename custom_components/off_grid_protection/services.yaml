@@ -21,11 +21,3 @@ activate_override:
           step: 1
           mode: box
           unit_of_measurement: min
-
-    pin:
-      name: PIN
-      description: Off-grid Protection PIN.
-      required: true
-      selector:
-        text:
-          type: password

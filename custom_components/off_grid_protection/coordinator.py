@@ -1516,7 +1516,6 @@ class OffGridCoordinator:
         self,
         device_id: str,
         duration_minutes: int,
-        pin: str,
     ) -> bool:
         """Activate a per-device OFF-GRID override."""
 
@@ -1568,28 +1567,18 @@ class OffGridCoordinator:
             )
             return False
 
-        if device.require_pin:
-            if str(pin) != str(
-                self.central.central_pin
-            ):
-                self._log(logging.WARNING, 
-                    "OFF-GRID OVERRIDE: "
-                    "REJECTED: %s -> invalid PIN",
-                    device.name,
-                )
+        try:
+            duration = int(duration_minutes)
+        except (TypeError, ValueError):
+            duration = 0
 
-                self.hass.bus.async_fire(
-                    "off_grid_protection_security",
-                    {
-                        "action": "invalid_pin",
-                        "device_id": device.id,
-                        "device_name": device.name,
-                    },
-                )
-
-                return False
-
-        duration = int(duration_minutes)
+        if duration <= 0:
+            self._log(
+                logging.WARNING,
+                "OFF-GRID OVERRIDE: REJECTED: %s -> no valid duration configured",
+                device.name,
+            )
+            return False
 
         if duration < device.minimum_runtime:
             self._log(logging.WARNING, 

@@ -111,14 +111,6 @@ class OffGridDevice:
             True,
         )
 
-    @property
-    def require_pin(self) -> bool:
-        """Return whether PIN is required."""
-
-        return self.override.get(
-            "require_pin",
-            True,
-        )
 
     @property
     def minimum_runtime(self) -> int:

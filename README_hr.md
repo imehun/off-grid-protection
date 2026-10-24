@@ -1,6 +1,6 @@
 # OGP -- Off-grid Battery Protection
 
-**Trenutna verzija: v1.4.0**
+**Trenutna verzija: v1.4.1**
 
 Prilagođena Home Assistant integracija za zaštitu **baterijskog sustava
 tijekom OFF-GRID rada**.
@@ -171,14 +171,23 @@ niti distribuira izvorni kod Huawei Solar integracije.
 
 ## Instalacija Lovelace frontenda
 
-### Instalacija Lovelace frontenda
+OGP Lovelace card uključen je u integraciju i poslužuje se s putanje
+`/off_grid_protection/ogp-card.js`. U standardnom storage načinu rada
+Home Assistanta OGP automatski registrira card kao dashboard resource.
 
-Frontend card `OGP.js` instalira se odvojeno od Python integracije:
+Nije potrebno ručno kopirati datoteku ni registrirati resource.
 
-1. Kopirajte `OGP.js` u `/config/www/`.
-2. Dodajte `/local/OGP.js` u **Settings → Dashboards → Resources** kao
-   **JavaScript module**.
-3. Ponovno učitajte Home Assistant frontend.
+Ako su Lovelace resursi konfigurirani u YAML načinu rada, dodajte
+sljedeći resource u `resources` listu Lovelace konfiguracije:
+
+```yaml
+resources:
+  - url: /off_grid_protection/ogp-card.js?v=1.4.1
+    type: module
+```
+
+Nakon ažuriranja OGP-a ponovno učitajte Home Assistant frontend ako se
+card ne osvježi automatski.
 
 Detaljna Lovelace konfiguracija i generiranje YAML-a opisani su u
 `CONFIGURATION_hr.md`.
@@ -189,6 +198,13 @@ Detaljna Lovelace konfiguracija i generiranje YAML-a opisani su u
 -   [`README_hr.md`](README_hr.md) --- hrvatski pregled
 -   [`CONFIGURATION.md`](CONFIGURATION.md) --- detaljna konfiguracija
 -   [`CONFIGURATION_hr.md`](CONFIGURATION_hr.md) --- detaljne hrvatske upute
+
+## Promjene u V1.4.1
+
+- Ispravljena je nedefinirana varijabla u početnom Central Setupu pri
+  uključivanju obavijesti.
+- Lovelace card sada je dio integracije, uz automatsko posluživanje
+  statičke datoteke i registraciju resursa.
 
 ## Promjene u V1.4.0
 

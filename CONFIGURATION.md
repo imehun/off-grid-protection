@@ -1,6 +1,14 @@
 # OGP --- Configuration Guide
 
-Detailed configuration guide for OGP v1.4.0.
+Detailed configuration guide for OGP v1.4.1.
+
+## V1.4.1 release changes
+
+- Fixed the undefined variable in the initial Central Setup notification flow.
+- Bundled the Lovelace card inside the integration and automatically
+  registered it as a dashboard resource in storage mode.
+- In YAML resource mode, add `/off_grid_protection/ogp-card.js?v=1.4.1`
+  to the Lovelace YAML configuration.
 
 ## V1.4.0 release changes
 
@@ -397,28 +405,25 @@ devices:
 
 The device list is generated from the current OGP Device Entries.
 
-### 9.1 OGP.js installation
+### 9.1 OGP Lovelace card installation
 
-The `OGP.js` file is the frontend Lovelace card used by `custom:ogp-card`.
-It must be installed separately from the Python integration files.
+The card is included in the integration and served at
+`/off_grid_protection/ogp-card.js`. In storage mode, OGP automatically
+registers it as a dashboard resource.
 
-1. Copy `OGP.js` to the Home Assistant `/config/www/` directory.
-2. Keep the filename as `OGP.js`.
-3. In Home Assistant, open **Settings → Dashboards → Resources**.
-4. Add the following resource:
-   - **URL:** `/local/OGP.js`
-   - **Resource type:** `JavaScript module`
-5. Save the resource and reload the Home Assistant frontend (a hard
-   browser refresh may be required).
+In YAML resource mode, add:
 
-After installation, the card can be used with:
+```yaml
+resources:
+  - url: /off_grid_protection/ogp-card.js?v=1.4.1
+    type: module
+```
+
+The card type remains:
 
 ```yaml
 type: custom:ogp-card
 ```
-
-The `OGP.js` file is a Lovelace frontend component. It is not installed
-automatically by the OGP Python integration.
 
 ### 9.2 Central Lovelace YAML generator
 

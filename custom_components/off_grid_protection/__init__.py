@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import asyncio
+import logging
+from pathlib import Path
 
 import voluptuous as vol
 
 from homeassistant import config_entries
 from homeassistant.components import persistent_notification
+from homeassistant.components.http import StaticPathConfig
 from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.core import HomeAssistant, ServiceCall, SupportsResponse
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.components.frontend.storage import async_user_store
 from homeassistant.helpers import config_validation as cv
 from homeassistant.util import slugify
@@ -26,6 +30,70 @@ from .notifications import (
 )
 
 DOMAIN = "off_grid_protection"
+_LOGGER = logging.getLogger(__name__)
+
+CARD_URL = "/off_grid_protection/ogp-card.js"
+CARD_RESOURCE_URL = f"{CARD_URL}?v=1.4.1"
+
+
+async def _async_register_frontend(hass: HomeAssistant) -> None:
+    """Serve the OGP card and register it as a Lovelace resource."""
+    domain_data = hass.data.setdefault(DOMAIN, {})
+    if domain_data.get("frontend_registered"):
+        return
+
+    card_path = Path(__file__).parent / "www" / "ogp-card.js"
+    try:
+        await hass.http.async_register_static_paths(
+            [StaticPathConfig(CARD_URL, str(card_path), False)]
+        )
+    except RuntimeError:
+        # The route may already exist if setup is retried in the same HA run.
+        _LOGGER.debug("OGP frontend path is already registered")
+
+    domain_data["frontend_registered"] = True
+
+    lovelace = hass.data.get("lovelace")
+    if lovelace is None:
+        _LOGGER.warning(
+            "OGP card is served at %s, but Lovelace was not available "
+            "for automatic resource registration",
+            CARD_URL,
+        )
+        return
+
+    if getattr(lovelace, "resource_mode", "storage") != "storage":
+        _LOGGER.info(
+            "OGP card is served at %s. Lovelace uses YAML resources; add "
+            "%s as a module resource in configuration.yaml",
+            CARD_URL,
+            CARD_RESOURCE_URL,
+        )
+        return
+
+    resources = getattr(lovelace, "resources", None)
+    if resources is None:
+        _LOGGER.warning(
+            "OGP card is served at %s, but Lovelace resources are unavailable",
+            CARD_URL,
+        )
+        return
+
+    try:
+        existing = resources.async_items()
+        if any(item.get("url", "").split("?")[0] == CARD_URL for item in existing):
+            return
+        await resources.async_create_item(
+            {"res_type": "module", "url": CARD_RESOURCE_URL}
+        )
+        _LOGGER.info("Registered OGP Lovelace card resource: %s", CARD_RESOURCE_URL)
+    except (HomeAssistantError, RuntimeError, AttributeError, TypeError):
+        _LOGGER.warning(
+            "Could not automatically register the OGP Lovelace card resource. "
+            "Add %s as a module resource manually if needed.",
+            CARD_RESOURCE_URL,
+            exc_info=True,
+        )
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 
@@ -173,6 +241,7 @@ async def async_setup(
         DOMAIN,
         {},
     )
+    await _async_register_frontend(hass)
 
     async def handle_activate_override(
         call: ServiceCall,

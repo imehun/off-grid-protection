@@ -1,6 +1,15 @@
 # OGP --- Upute za konfiguraciju
 
-Detaljne upute za konfiguraciju OGP-a v1.4.0.
+Detaljne upute za konfiguraciju OGP-a v1.4.1.
+
+## Promjene u V1.4.1
+
+- Ispravljena je nedefinirana varijabla u početnom Central Setupu pri
+  uključivanju obavijesti.
+- Lovelace card sada je dio integracije i automatski se registrira kao
+  dashboard resource u storage načinu rada.
+- U YAML načinu rada resource se dodaje u Lovelace YAML konfiguraciju
+  preko putanje `/off_grid_protection/ogp-card.js?v=1.4.1`.
 
 ## Promjene u V1.4.0
 
@@ -397,28 +406,25 @@ devices:
 
 Lista uređaja generira se iz trenutno konfiguriranih OGP Device Entryja.
 
-### 9.1 Instalacija OGP.js
+### 9.1 Instalacija OGP Lovelace carda
 
-Datoteka `OGP.js` je frontend Lovelace card koji koristi
-`custom:ogp-card`. Instalira se odvojeno od Python datoteka integracije.
+Card je uključen u integraciju i poslužuje se s putanje
+`/off_grid_protection/ogp-card.js`. U storage načinu rada OGP ga
+automatski registrira kao dashboard resource.
 
-1. Kopirajte `OGP.js` u direktorij Home Assistanta `/config/www/`.
-2. Zadržite naziv datoteke `OGP.js`.
-3. U Home Assistantu otvorite **Settings → Dashboards → Resources**.
-4. Dodajte sljedeći resource:
-   - **URL:** `/local/OGP.js`
-   - **Resource type:** `JavaScript module`
-5. Spremite resource i ponovno učitajte Home Assistant frontend
-   (možda će biti potreban hard refresh preglednika).
+U YAML načinu rada dodajte:
 
-Nakon instalacije card se koristi s:
+```yaml
+resources:
+  - url: /off_grid_protection/ogp-card.js?v=1.4.1
+    type: module
+```
+
+Tip carda ostaje:
 
 ```yaml
 type: custom:ogp-card
 ```
-
-Datoteka `OGP.js` je Lovelace frontend komponenta. Python integracija
-OGP-a je ne instalira automatski.
 
 ### 9.2 Centralni Lovelace YAML generator
 

@@ -1,6 +1,6 @@
 # OGP -- Off-grid Battery Protection
 
-**Current release: v1.4.0**
+**Current release: v1.4.1**
 
 Home Assistant custom integration for protecting a **battery system
 during OFF-GRID operation**.
@@ -155,15 +155,23 @@ decides whether and when the device should operate.
 
 ## Lovelace frontend installation
 
-### Lovelace frontend installation
+The OGP Lovelace card is included in the integration and is served from
+`/off_grid_protection/ogp-card.js`. In Home Assistant's standard storage
+mode, OGP registers the card as a dashboard resource automatically.
 
-The `OGP.js` frontend card is installed separately from the Python
-integration:
+No manual file copying or resource registration is required.
 
-1. Copy `OGP.js` to `/config/www/`.
-2. Add `/local/OGP.js` under **Settings → Dashboards → Resources** as
-   **JavaScript module**.
-3. Reload the Home Assistant frontend.
+If Lovelace resources are configured in YAML mode, add the following
+resource to the `resources` list in your Lovelace configuration:
+
+```yaml
+resources:
+  - url: /off_grid_protection/ogp-card.js?v=1.4.1
+    type: module
+```
+
+After updating OGP, reload the Home Assistant frontend if the card does
+not immediately refresh.
 
 Detailed Lovelace configuration and the generated YAML workflow are
 documented in `CONFIGURATION.md`.
@@ -190,6 +198,12 @@ or distribute Huawei Solar source code.
 -   [`README_hr.md`](README_hr.md) --- Croatian overview
 -   [`CONFIGURATION.md`](CONFIGURATION.md) --- Detailed configuration
 -   [`CONFIGURATION_hr.md`](CONFIGURATION_hr.md) --- Detailed Croatian configuration
+
+## V1.4.1 changes
+
+- Fixed an undefined variable in the initial Central Setup notification flow.
+- Bundled the Lovelace card inside the integration and added automatic
+  static serving and resource registration.
 
 ## V1.4.0 changes
 

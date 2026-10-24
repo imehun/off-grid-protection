@@ -1,6 +1,9 @@
 {
   "domain": "off_grid_protection",
   "name": "OGP – Off-grid Battery Protection",
+    "categories": [
+    "energy"
+  ],
   "after_dependencies": [
     "lovelace"
   ],

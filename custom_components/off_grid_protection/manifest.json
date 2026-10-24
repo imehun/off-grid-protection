@@ -1,20 +1,20 @@
 {
   "domain": "off_grid_protection",
   "name": "OGP – Off-grid Battery Protection",
+  "after_dependencies": [
+    "lovelace"
+  ],
   "codeowners": [
     "@imehun"
   ],
   "config_flow": true,
+  "dependencies": [
+    "http"
+  ],
   "documentation": "https://github.com/imehun/off-grid-protection",
   "integration_type": "hub",
   "iot_class": "calculated",
   "issue_tracker": "https://github.com/imehun/off-grid-protection/issues",
   "requirements": [],
-  "version": "1.4.1",
-  "dependencies": [
-    "http"
-  ],
-  "after_dependencies": [
-    "lovelace"
-  ]
+  "version": "1.4.1"
 }
